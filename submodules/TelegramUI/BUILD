@@ -576,6 +576,7 @@ swift_library(
     ] + select({
         "@build_bazel_rules_apple//apple:ios_arm64": appcenter_targets,
         "//build-system:ios_sim_arm64": [],
+        "//conditions:default": [],
     }),
     visibility = [
         "//visibility:public",

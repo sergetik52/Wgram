@@ -543,6 +543,12 @@ aps_fragment = "" if telegram_aps_environment == "" else """
 """.format(telegram_aps_environment=telegram_aps_environment)
 
 app_groups_fragment = """
+    <key>application-identifier</key>
+    <string>{telegram_team_id}.{telegram_bundle_id}</string>
+""".format(
+    telegram_team_id=telegram_team_id,
+    telegram_bundle_id=telegram_bundle_id
+) if telegram_use_xcode_managed_codesigning else """
     <key>com.apple.security.application-groups</key>
     <array>
         <string>group.{telegram_bundle_id}</string>
@@ -636,7 +642,7 @@ plist_fragment(
     template =
     """
     <key>CFBundleDisplayName</key>
-    <string>Telegram</string>
+    <string>Wgram</string>
     """
 )
 
@@ -1621,11 +1627,11 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>Telegram</string>
+    <string>Wgram</string>
     <key>CFBundleIdentifier</key>
     <string>{telegram_bundle_id}</string>
     <key>CFBundleName</key>
-    <string>Telegram</string>
+    <string>Wgram</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>

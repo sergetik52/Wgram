@@ -3,6 +3,7 @@ fastlane/report.xml
 fastlane/test_output/*
 fastlane/fastlanematch
 build/*
+bazel-*
 *.pbxuser
 !default.pbxuser
 *.mode1v3

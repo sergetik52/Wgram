@@ -347,6 +347,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     private var recaptchaClientsBySiteKey: [String: Promise<RecaptchaClient>] = [:]
         
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        NSLog(">>> WGRAM: application didFinishLaunchingWithOptions started")
         precondition(!testIsLaunched)
         testIsLaunched = true
         
@@ -559,10 +560,19 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         
         let baseAppBundleId = Bundle.main.bundleIdentifier!
         let appGroupName = "group.\(baseAppBundleId)"
+        NSLog(">>> WGRAM: configuring PasscodeEnvironment with baseAppBundleId: %@", baseAppBundleId)
         try! PasscodeEnvironment.shared.configure(PasscodeConfiguration(appGroupIdentifier: appGroupName, processRole: .mainApp, biometricKeychainService: walletBiometricKeychainService), privateAccessGroup: {
             BuildConfig.keychainAccessGroup(baseAppBundleId: baseAppBundleId)
         })
-        let maybeAppGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)
+        NSLog(">>> WGRAM: PasscodeEnvironment configured successfully")
+        var maybeAppGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)
+        if maybeAppGroupUrl == nil {
+            let appSupportUrl = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let customGroupUrl = appSupportUrl.appendingPathComponent("AppGroup")
+            try? FileManager.default.createDirectory(at: customGroupUrl, withIntermediateDirectories: true, attributes: nil)
+            maybeAppGroupUrl = customGroupUrl
+        }
+        NSLog(">>> WGRAM: maybeAppGroupUrl is: %@", String(describing: maybeAppGroupUrl?.path))
         
         let buildConfig = BuildConfig(baseAppBundleId: baseAppBundleId)
         self.buildConfig = buildConfig
@@ -771,7 +781,9 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         
         let logsPath = rootPath + "/logs/app-logs"
         let _ = try? FileManager.default.createDirectory(atPath: logsPath, withIntermediateDirectories: true, attributes: nil)
+        NSLog(">>> WGRAM: initializing Logger with logsPath: %@", logsPath)
         Logger.setSharedLogger(Logger(rootPath: rootPath, basePath: logsPath))
+        NSLog(">>> WGRAM: Logger initialized successfully")
 
         setManagedAudioSessionLogger({ s in
             Logger.shared.log("ManagedAudioSession", s)
@@ -1758,6 +1770,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     }
 
     func attach(scene: UIWindowScene, connectionOptions: UIScene.ConnectionOptions) {
+        NSLog(">>> WGRAM: AppDelegate attach(scene:) called, window = %@", String(describing: self.window))
         self.statusBarHost?.scene = scene
         self.window?.windowScene = scene
 
@@ -1783,6 +1796,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
 
         self.mainWindow?.updateDeviceMetrics()
         self.window?.makeKeyAndVisible()
+        NSLog(">>> WGRAM: AppDelegate attach(scene:) completed, window isKey: %d", self.window?.isKeyWindow == true ? 1 : 0)
 
         for context in connectionOptions.urlContexts {
             let url = context.url
@@ -2142,7 +2156,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     }
     
     func applicationWillTerminate(_ application: UIApplication) {
-        Logger.shared.log("App \(self.episodeId)", "terminating")
+        NSLog(">>> WGRAM: applicationWillTerminate called")
     }
     
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {

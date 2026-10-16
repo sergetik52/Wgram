@@ -147,7 +147,16 @@ final class OrderedItemListTable: Table {
             self.indexTable.remove(collectionId: collectionId, id: id)
         }
         
-
+        var uniqueItems: [OrderedItemListEntry] = []
+        var seenIds = Set<Data>()
+        for item in items {
+            let idData = item.id.makeData()
+            if !seenIds.contains(idData) {
+                seenIds.insert(idData)
+                uniqueItems.append(item)
+            }
+        }
+        let items = uniqueItems
         assert(Set(items.map({ $0.id.makeData() })).count == items.count)
         for i in 0 ..< items.count {
             self.valueBox.set(self.table, key: self.keyIndexToId(collectionId: collectionId, itemIndex: UInt32(i)), value: items[i].id)

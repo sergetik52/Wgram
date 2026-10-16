@@ -46,6 +46,7 @@ class BazelCommandLine:
         self.show_actions = False
         self.enable_sandbox = False
         self.disable_provisioning_profiles = False
+        self.disable_extensions = False
         self.profile_swift = False
         self.embed_watch_app = False
         self.watch_api_id = None
@@ -79,7 +80,10 @@ class BazelCommandLine:
         self.common_build_args = [
         ]
 
-        num_threads = max(os.cpu_count() - 2, 2)
+        num_threads = os.cpu_count() or 6
+        self.common_args += [
+            f'--jobs={num_threads}',
+        ]
         self.common_debug_args = [
             '--@build_bazel_rules_swift//swift:copt="-j"',
             f'--@build_bazel_rules_swift//swift:copt="{num_threads}"',
@@ -140,6 +144,9 @@ class BazelCommandLine:
 
     def set_disable_provisioning_profiles(self):
         self.disable_provisioning_profiles = True
+
+    def set_disable_extensions(self, disable_extensions):
+        self.disable_extensions = disable_extensions
 
     def set_profile_swift(self, value):
         self.profile_swift = value
@@ -301,6 +308,9 @@ class BazelCommandLine:
 
         if self.disable_provisioning_profiles:
             combined_arguments += ['--//Telegram:disableProvisioningProfiles']
+
+        if self.disable_extensions:
+            combined_arguments += ['--//Telegram:disableExtensions']
 
         combined_arguments += self.common_args
         combined_arguments += self.common_build_args
@@ -687,6 +697,9 @@ def build(bazel, arguments):
     bazel_command_line.set_show_actions(arguments.showActions)
     bazel_command_line.set_enable_sandbox(arguments.sandbox)
     bazel_command_line.set_profile_swift(arguments.profileSwift)
+
+    if arguments.xcodeManagedCodesigning:
+        bazel_command_line.set_disable_extensions(True)
 
     bazel_command_line.set_split_swiftmodules(arguments.enableParallelSwiftmoduleGeneration)
 

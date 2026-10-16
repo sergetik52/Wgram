@@ -13,15 +13,19 @@ import UIKit
     }
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        NSLog(">>> WGRAM: SceneDelegate willConnectTo session role: %@", session.role.rawValue)
         guard session.role == .windowApplication, let windowScene = scene as? UIWindowScene else {
+            NSLog(">>> WGRAM: SceneDelegate early return - not windowApplication or not UIWindowScene")
             return
         }
         guard let appDelegate = self.appDelegate else {
+            NSLog(">>> WGRAM: SceneDelegate early return - appDelegate is nil!")
             return
         }
         self.isPrimaryScene = true
         appDelegate.attach(scene: windowScene, connectionOptions: connectionOptions)
         self.window = appDelegate.window
+        NSLog(">>> WGRAM: SceneDelegate attached successfully, window: %@", String(describing: self.window))
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
