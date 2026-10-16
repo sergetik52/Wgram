@@ -163,6 +163,7 @@ enum PeerInfoSettingsSection {
     case recentCalls
     case devices
     case chatFolders
+    case wgramSettings
     case notificationsAndSounds
     case privacyAndSecurity
     case passwordSetup

@@ -246,6 +246,9 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 4, text: presentationData.strings.Settings_ChatFolders, icon: PresentationResourcesSettings.chatFolders, action: {
         interaction.openSettings(.chatFolders)
     }))
+    items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 5, label: .text(WgramSettings.ghostModeEnabled ? "Вкл" : ""), text: "👻 Режим призрака", icon: PresentationResourcesSettings.security, action: {
+        interaction.openSettings(.wgramSettings)
+    }))
     
     let notificationsWarning: Bool
     if let settings = data.globalSettings {
