@@ -17,6 +17,7 @@ private final class AccountPresenceManagerImpl {
     private var onlineTimer: SignalKitTimer?
     
     private var wasOnline: Bool = false
+    private var settingsNotificationObserver: AnyObject?
     
     init(queue: Queue, shouldKeepOnlinePresence: Signal<Bool, NoError>, network: Network) {
         self.queue = queue
@@ -33,6 +34,13 @@ private final class AccountPresenceManagerImpl {
                 self.updatePresence(value)
             }
         })
+
+        self.settingsNotificationObserver = NotificationCenter.default.addObserver(forName: WgramSettings.didChangeNotification, object: nil, queue: nil) { [weak self] _ in
+            guard let strongSelf = self else { return }
+            strongSelf.queue.async {
+                strongSelf.updatePresence(strongSelf.wasOnline)
+            }
+        }
     }
     
     deinit {
@@ -40,17 +48,16 @@ private final class AccountPresenceManagerImpl {
         self.shouldKeepOnlinePresenceDisposable?.dispose()
         self.currentRequestDisposable.dispose()
         self.onlineTimer?.invalidate()
+        if let observer = self.settingsNotificationObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
     
     private func updatePresence(_ isOnline: Bool) {
         let request: Signal<Api.Bool, MTRpcError>
         if isOnline {
-            if WgramSettings.dontUpdateOnline {
-                self.onlineTimer?.invalidate()
-                self.onlineTimer = nil
-                return
-            }
-            let timer = SignalKitTimer(timeout: 30.0, repeat: false, completion: { [weak self] in
+            self.onlineTimer?.invalidate()
+            let timer = SignalKitTimer(timeout: 25.0, repeat: false, completion: { [weak self] in
                 guard let strongSelf = self else {
                     return
                 }
@@ -58,7 +65,12 @@ private final class AccountPresenceManagerImpl {
             }, queue: self.queue)
             self.onlineTimer = timer
             timer.start()
-            request = self.network.request(Api.functions.account.updateStatus(offline: .boolFalse))
+
+            if WgramSettings.dontUpdateOnline {
+                request = self.network.request(Api.functions.account.updateStatus(offline: .boolTrue))
+            } else {
+                request = self.network.request(Api.functions.account.updateStatus(offline: .boolFalse))
+            }
         } else {
             self.onlineTimer?.invalidate()
             self.onlineTimer = nil
