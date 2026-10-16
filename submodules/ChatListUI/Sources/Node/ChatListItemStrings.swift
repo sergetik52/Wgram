@@ -568,5 +568,9 @@ public func chatListItemStrings(strings: PresentationStrings, nameDisplayOrder: 
     if richTextPreview?.string != messageText {
         richTextPreview = nil
     }
+    if let message = messages.first, message.isDeletedByRemote {
+        messageText = "🗑️ " + messageText
+        richTextPreview = nil
+    }
     return (peer, hideAuthor, messageText, messageEntities, spoilers, customEmojiRanges, richTextPreview)
 }

@@ -251,5 +251,9 @@ public func stringForMessageTimestampStatus(
         }
     }
     
+    if message.isDeletedByRemote {
+        dateText = "🗑️ " + dateText
+    }
+    
     return dateText
 }

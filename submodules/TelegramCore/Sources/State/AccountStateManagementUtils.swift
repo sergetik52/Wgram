@@ -4598,18 +4598,44 @@ func replayFinalState(
                 deleteEphemeralMessages(transaction: transaction, peerId: peerId, ids: ids)
             case let .DeleteMessagesWithGlobalIds(ids):
                 var resourceIds: [MediaResourceId] = []
-                transaction.deleteMessagesWithGlobalIds(ids, forEachMedia: { media in
-                    addMessageMediaResourceIdsToRemove(media: media, resourceIds: &resourceIds)
-                })
-                if !resourceIds.isEmpty {
-                    let _ = mediaBox.removeCachedResources(Array(Set(resourceIds)), force: true).start()
+                var idsToDeleteLocally: [Int32] = []
+                for id in ids {
+                    let messageIds = transaction.messageIdsForGlobalIds([id])
+                    var shouldPreserve = false
+                    for messageId in messageIds {
+                        if let message = transaction.getMessage(messageId), message.flags.contains(.Incoming) {
+                            shouldPreserve = true
+                            markMessageAsDeletedLocally(transaction: transaction, id: messageId)
+                        }
+                    }
+                    if !shouldPreserve {
+                        idsToDeleteLocally.append(id)
+                    }
                 }
-                deletedMessageIds.append(contentsOf: ids.map { .global($0) })
+                if !idsToDeleteLocally.isEmpty {
+                    transaction.deleteMessagesWithGlobalIds(idsToDeleteLocally, forEachMedia: { media in
+                        addMessageMediaResourceIdsToRemove(media: media, resourceIds: &resourceIds)
+                    })
+                    if !resourceIds.isEmpty {
+                        let _ = mediaBox.removeCachedResources(Array(Set(resourceIds)), force: true).start()
+                    }
+                    deletedMessageIds.append(contentsOf: idsToDeleteLocally.map { .global($0) })
+                }
             case let .DeleteMessages(ids):
-                _internal_deleteMessages(transaction: transaction, mediaBox: mediaBox, ids: ids, manualAddMessageThreadStatsDifference: { id, add, remove in
-                    addMessageThreadStatsDifference(threadKey: id, remove: remove, addedMessagePeer: nil, addedMessageId: nil, isOutgoing: false)
-                })
-                deletedMessageIds.append(contentsOf: ids.map { .messageId($0) })
+                var idsToDeleteLocally: [MessageId] = []
+                for id in ids {
+                    if let message = transaction.getMessage(id), message.flags.contains(.Incoming) {
+                        markMessageAsDeletedLocally(transaction: transaction, id: id)
+                    } else {
+                        idsToDeleteLocally.append(id)
+                    }
+                }
+                if !idsToDeleteLocally.isEmpty {
+                    _internal_deleteMessages(transaction: transaction, mediaBox: mediaBox, ids: idsToDeleteLocally, manualAddMessageThreadStatsDifference: { id, add, remove in
+                        addMessageThreadStatsDifference(threadKey: id, remove: remove, addedMessagePeer: nil, addedMessageId: nil, isOutgoing: false)
+                    })
+                    deletedMessageIds.append(contentsOf: idsToDeleteLocally.map { .messageId($0) })
+                }
             case let .UpdateMinAvailableMessage(id):
                 if let message = transaction.getMessage(id) {
                     updatePeerChatInclusionWithMinTimestamp(transaction: transaction, id: id.peerId, minTimestamp: message.timestamp, forceRootGroupIfNotExists: false)

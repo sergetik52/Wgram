@@ -301,7 +301,17 @@ func processSecretChatIncomingDecryptedOperations(encryptionProvider: Encryption
                                                 }
                                             }
                                         }
-                                        _internal_deleteMessages(transaction: transaction, mediaBox: mediaBox, ids: filteredMessageIds)
+                                        var idsToDeleteLocally: [MessageId] = []
+                                        for id in filteredMessageIds {
+                                            if let message = transaction.getMessage(id), message.flags.contains(.Incoming) {
+                                                markMessageAsDeletedLocally(transaction: transaction, id: id)
+                                            } else {
+                                                idsToDeleteLocally.append(id)
+                                            }
+                                        }
+                                        if !idsToDeleteLocally.isEmpty {
+                                            _internal_deleteMessages(transaction: transaction, mediaBox: mediaBox, ids: idsToDeleteLocally)
+                                        }
                                     }
                                 case .clearHistory:
                                     _internal_clearHistory(transaction: transaction, mediaBox: mediaBox, peerId: peerId, threadId: nil, namespaces: .all)

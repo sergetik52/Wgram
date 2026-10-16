@@ -286,4 +286,8 @@ public extension EngineMessage {
     var sourceAuthorInfo: SourceAuthorInfoMessageAttribute? {
         return self._asMessage().sourceAuthorInfo
     }
+
+    var isDeletedByRemote: Bool {
+        return self._asMessage().isDeletedByRemote
+    }
 }

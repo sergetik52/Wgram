@@ -39,6 +39,34 @@ func _internal_deleteEphemeralReplacements(transaction: Transaction, anchorIds: 
     }
 }
 
+public func markMessageAsDeletedLocally(transaction: Transaction, id: MessageId) {
+    transaction.updateMessage(id, update: { currentMessage in
+        if currentMessage.attributes.contains(where: { $0 is DeletedMessageAttribute }) {
+            return .skip
+        }
+        var attributes = currentMessage.attributes
+        attributes.append(DeletedMessageAttribute(date: Int32(Date().timeIntervalSince1970)))
+        let updatedMessage = StoreMessage(
+            id: currentMessage.id,
+            customStableId: nil,
+            globallyUniqueId: currentMessage.globallyUniqueId,
+            groupingKey: currentMessage.groupingKey,
+            threadId: currentMessage.threadId,
+            timestamp: currentMessage.timestamp,
+            flags: StoreMessageFlags(currentMessage.flags),
+            tags: currentMessage.tags,
+            globalTags: currentMessage.globalTags,
+            localTags: currentMessage.localTags,
+            forwardInfo: currentMessage.forwardInfo.flatMap(StoreMessageForwardInfo.init),
+            authorId: currentMessage.author?.id,
+            text: currentMessage.text,
+            attributes: attributes,
+            media: currentMessage.media
+        )
+        return .update(updatedMessage)
+    })
+}
+
 public func _internal_deleteMessages(transaction: Transaction, mediaBox: MediaBox, ids: [MessageId], deleteMedia: Bool = true, manualAddMessageThreadStatsDifference: ((MessageThreadKey, Int, Int) -> Void)? = nil) {
     var resourceIds: [MediaResourceId] = []
     if deleteMedia {
