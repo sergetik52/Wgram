@@ -52,12 +52,10 @@ func _internal_installInteractiveReadMessagesAction(postbox: Postbox, stateManag
                 }
                 
                 if !message.flags.intersection(.IsIncomingMask).isEmpty {
-                    if !WgramSettings.dontReadMessages {
-                        let index = MessageIndex(id: id, timestamp: message.timestamp)
-                        let current = readMessageIndexByNamespace[id.namespace]
-                        if current == nil || current! < index {
-                            readMessageIndexByNamespace[id.namespace] = index
-                        }
+                    let index = MessageIndex(id: id, timestamp: message.timestamp)
+                    let current = readMessageIndexByNamespace[id.namespace]
+                    if current == nil || current! < index {
+                        readMessageIndexByNamespace[id.namespace] = index
                     }
                 }
             }

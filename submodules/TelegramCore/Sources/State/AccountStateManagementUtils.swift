@@ -4977,6 +4977,13 @@ func replayFinalState(
                     transaction.applyMarkUnread(peerId: peerId, namespace: namespace, value: value, interactive: false)
                 }
             case let .ResetMessageTagSummary(peerId, tag, namespace, count, range):
+                if WgramSettings.dontReadMessages && (tag == .unseenReaction || tag == .unseenPollVote || tag == .unseenPersonalMessage) {
+                    if let currentSummary = transaction.getMessageTagSummary(peerId: peerId, threadId: nil, tagMask: tag, namespace: namespace, customTag: nil) {
+                        if currentSummary.count == 0 && range.maxId <= currentSummary.range.maxId {
+                            break
+                        }
+                    }
+                }
                 transaction.replaceMessageTagSummary(peerId: peerId, threadId: nil, tagMask: tag, namespace: namespace, customTag: nil, count: count, maxId: range.maxId)
                 if count == 0 {
                     transaction.removeHole(peerId: peerId, threadId: nil, namespace: namespace, space: .tag(tag), range: 1 ... (Int32.max - 1))

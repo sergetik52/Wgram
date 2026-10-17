@@ -2688,7 +2688,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
             if apply {
                 switch strongSelf.chatLocation {
                 case .peer, .replyThread:
-                    if !strongSelf.context.sharedContext.immediateExperimentalUISettings.skipReadHistory && !strongSelf.context.account.isSupportUser && !WgramSettings.dontReadMessages {
+                    if !strongSelf.context.sharedContext.immediateExperimentalUISettings.skipReadHistory && !strongSelf.context.account.isSupportUser {
                         strongSelf.context.applyMaxReadIndex(for: strongSelf.chatLocation, contextHolder: strongSelf.chatLocationContextHolder, messageIndex: messageIndex)
                     }
                 case .customChatContents:
@@ -2700,7 +2700,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
         self.canReadHistoryDisposable?.dispose()
         self.canReadHistoryDisposable = (self.canReadHistory.get() |> deliverOnMainQueue).startStrict(next: { [weak self, weak context] value in
             if let strongSelf = self {
-                let effectiveValue = value && !WgramSettings.dontReadMessages
+                let effectiveValue = value
                 if strongSelf.canReadHistoryValue != effectiveValue {
                     strongSelf.canReadHistoryValue = effectiveValue
                     strongSelf.controllerInteraction.canReadHistory = value
@@ -4908,7 +4908,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
     }
     
     private func updateReadHistoryActions() {
-        let canRead = self.canReadHistoryValue && self.isScrollAtBottomPosition && !WgramSettings.dontReadMessages
+        let canRead = self.canReadHistoryValue && self.isScrollAtBottomPosition
         
         if canRead != (self.interactiveReadActionDisposable != nil) {
             if let interactiveReadActionDisposable = self.interactiveReadActionDisposable {

@@ -7001,7 +7001,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             self.canReadHistory.get(),
             self.hasBrowserOrAppInFront.get()
         ) |> map { inForeground, globallyEnabled, hasBrowserOrWebAppInFront in
-            return inForeground && globallyEnabled && !hasBrowserOrWebAppInFront && !WgramSettings.dontReadMessages
+            return inForeground && globallyEnabled && !hasBrowserOrWebAppInFront
         } |> deliverOnMainQueue).startStrict(next: { [weak self] value in
             if let strongSelf = self, strongSelf.canReadHistoryValue != value {
                 strongSelf.canReadHistoryValue = value
@@ -7847,6 +7847,10 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         super.viewDidAppear(animated)
         
         self.didAppear = true
+        
+        if let peerId = self.chatLocation.peerId {
+            let _ = clearPeerUnseenReactionsAndPollVotesInteractively(account: self.context.account, peerId: peerId, threadId: self.chatLocation.threadId).startStandalone()
+        }
         
         self.chatDisplayNode.historyNode.experimentalSnapScrollToItem = false
         self.chatDisplayNode.historyNode.canReadHistory.set(self.computedCanReadHistoryPromise.get())

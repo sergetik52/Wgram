@@ -253,7 +253,25 @@ func managedReadReactionOrPollVoteActions(postbox: Postbox, network: Network, st
 
 private func synchronizeConsumeMessageContents(transaction: Transaction, postbox: Postbox, network: Network, stateManager: AccountStateManager, id: MessageId) -> Signal<Void, NoError> {
     if WgramSettings.dontReadMedia || WgramSettings.dontReadMessages {
-        return .complete()
+        return postbox.transaction { transaction -> Void in
+            transaction.setPendingMessageAction(type: .consumeUnseenPersonalMessage, id: id, action: nil)
+            transaction.updateMessage(id, update: { currentMessage in
+                var storeForwardInfo: StoreMessageForwardInfo?
+                if let forwardInfo = currentMessage.forwardInfo {
+                    storeForwardInfo = StoreMessageForwardInfo(authorId: forwardInfo.author?.id, sourceId: forwardInfo.source?.id, sourceMessageId: forwardInfo.sourceMessageId, date: forwardInfo.date, authorSignature: forwardInfo.authorSignature, psaType: forwardInfo.psaType, flags: forwardInfo.flags)
+                }
+                var attributes = currentMessage.attributes
+                loop: for j in 0 ..< attributes.count {
+                    if let attribute = attributes[j] as? ConsumablePersonalMentionMessageAttribute, !attribute.consumed {
+                        attributes[j] = ConsumablePersonalMentionMessageAttribute(consumed: true, pending: false)
+                        break loop
+                    }
+                }
+                var updatedTags = currentMessage.tags
+                updatedTags.remove(.unseenPersonalMessage)
+                return .update(StoreMessage(id: currentMessage.id, customStableId: nil, globallyUniqueId: currentMessage.globallyUniqueId, groupingKey: currentMessage.groupingKey, threadId: currentMessage.threadId, timestamp: currentMessage.timestamp, flags: StoreMessageFlags(currentMessage.flags), tags: updatedTags, globalTags: currentMessage.globalTags, localTags: currentMessage.localTags, forwardInfo: storeForwardInfo, authorId: currentMessage.author?.id, text: currentMessage.text, attributes: attributes, media: currentMessage.media))
+            })
+        }
     }
     if id.peerId.namespace == Namespaces.Peer.CloudUser || id.peerId.namespace == Namespaces.Peer.CloudGroup {
         return network.request(Api.functions.messages.readMessageContents(id: [id.id]))
@@ -325,7 +343,33 @@ private func synchronizeConsumeMessageContents(transaction: Transaction, postbox
 
 private func synchronizeReadMessageReactionsOrPollVotes(transaction: Transaction, postbox: Postbox, network: Network, stateManager: AccountStateManager, id: MessageId) -> Signal<Void, NoError> {
     if WgramSettings.dontReadMessages {
-        return .complete()
+        return postbox.transaction { transaction -> Void in
+            transaction.setPendingMessageAction(type: .readReactionOrPollVote, id: id, action: nil)
+            transaction.updateMessage(id, update: { currentMessage in
+                var storeForwardInfo: StoreMessageForwardInfo?
+                if let forwardInfo = currentMessage.forwardInfo {
+                    storeForwardInfo = StoreMessageForwardInfo(authorId: forwardInfo.author?.id, sourceId: forwardInfo.source?.id, sourceMessageId: forwardInfo.sourceMessageId, date: forwardInfo.date, authorSignature: forwardInfo.authorSignature, psaType: forwardInfo.psaType, flags: forwardInfo.flags)
+                }
+                var attributes = currentMessage.attributes
+                loop: for j in 0 ..< attributes.count {
+                    if let attribute = attributes[j] as? ReactionsMessageAttribute, attribute.hasUnseen {
+                        attributes[j] = attribute.withAllSeen()
+                        break loop
+                    }
+                }
+                var media = currentMessage.media
+                loop: for j in 0 ..< media.count {
+                    if let poll = media[j] as? TelegramMediaPoll {
+                        media[j] = poll.withoutUnreadResults()
+                    }
+                }
+                
+                var updatedTags = currentMessage.tags
+                updatedTags.remove(.unseenReaction)
+                updatedTags.remove(.unseenPollVote)
+                return .update(StoreMessage(id: currentMessage.id, customStableId: nil, globallyUniqueId: currentMessage.globallyUniqueId, groupingKey: currentMessage.groupingKey, threadId: currentMessage.threadId, timestamp: currentMessage.timestamp, flags: StoreMessageFlags(currentMessage.flags), tags: updatedTags, globalTags: currentMessage.globalTags, localTags: currentMessage.localTags, forwardInfo: storeForwardInfo, authorId: currentMessage.author?.id, text: currentMessage.text, attributes: attributes, media: media))
+            })
+        }
     }
     if id.peerId.namespace == Namespaces.Peer.CloudUser || id.peerId.namespace == Namespaces.Peer.CloudGroup {
         return network.request(Api.functions.messages.readMessageContents(id: [id.id]))
