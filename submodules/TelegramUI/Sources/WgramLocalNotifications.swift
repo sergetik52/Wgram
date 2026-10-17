@@ -117,9 +117,22 @@ public final class WgramLocalNotifications {
         // 7. Base notification content
         let content = UNMutableNotificationContent()
         content.title = title
-        content.body = body
-        content.sound = .default
-        content.categoryIdentifier = "c"
+        switch WgramSettings.notificationSound {
+        case "telegram":
+            content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "0.m4a"))
+        case "silent":
+            content.sound = nil
+        default:
+            content.sound = .default
+        }
+        
+        if isGroup {
+            content.categoryIdentifier = "gr"
+        } else if mainPeer?.id.namespace == Namespaces.Peer.CloudChannel {
+            content.categoryIdentifier = "c"
+        } else {
+            content.categoryIdentifier = "r"
+        }
         
         var userInfo: [String: Any] = [
             "peerId": firstMessage.id.peerId.toInt64(),

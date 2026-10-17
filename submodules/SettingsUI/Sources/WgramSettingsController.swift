@@ -18,6 +18,8 @@ private final class WgramSettingsControllerArguments {
     let toggleGhostSend: (Bool) -> Void
     let toggleMarkReadAfterAction: (Bool) -> Void
     let toggleBypassCopyProtection: (Bool) -> Void
+    let toggleBypassViewOnce: (Bool) -> Void
+    let toggleHideSponsoredMessages: (Bool) -> Void
     let toggleConfirmVoiceSend: (Bool) -> Void
     let toggleConfirmVideoSend: (Bool) -> Void
     let toggleConfirmStickerSend: (Bool) -> Void
@@ -26,6 +28,7 @@ private final class WgramSettingsControllerArguments {
     let toggleShowPeerIdAndDc: (Bool) -> Void
     let toggleShowMessageSeconds: (Bool) -> Void
     let toggleKeepAlive: (Bool) -> Void
+    let selectNotificationSound: () -> Void
     let toggleTgWsProxy: (Bool) -> Void
     let selectTgWsDomain: () -> Void
     let toggleTgWsAutoFallback: (Bool) -> Void
@@ -40,6 +43,8 @@ private final class WgramSettingsControllerArguments {
         toggleGhostSend: @escaping (Bool) -> Void,
         toggleMarkReadAfterAction: @escaping (Bool) -> Void,
         toggleBypassCopyProtection: @escaping (Bool) -> Void,
+        toggleBypassViewOnce: @escaping (Bool) -> Void,
+        toggleHideSponsoredMessages: @escaping (Bool) -> Void,
         toggleConfirmVoiceSend: @escaping (Bool) -> Void,
         toggleConfirmVideoSend: @escaping (Bool) -> Void,
         toggleConfirmStickerSend: @escaping (Bool) -> Void,
@@ -48,6 +53,7 @@ private final class WgramSettingsControllerArguments {
         toggleShowPeerIdAndDc: @escaping (Bool) -> Void,
         toggleShowMessageSeconds: @escaping (Bool) -> Void,
         toggleKeepAlive: @escaping (Bool) -> Void,
+        selectNotificationSound: @escaping () -> Void,
         toggleTgWsProxy: @escaping (Bool) -> Void,
         selectTgWsDomain: @escaping () -> Void,
         toggleTgWsAutoFallback: @escaping (Bool) -> Void
@@ -61,6 +67,8 @@ private final class WgramSettingsControllerArguments {
         self.toggleGhostSend = toggleGhostSend
         self.toggleMarkReadAfterAction = toggleMarkReadAfterAction
         self.toggleBypassCopyProtection = toggleBypassCopyProtection
+        self.toggleBypassViewOnce = toggleBypassViewOnce
+        self.toggleHideSponsoredMessages = toggleHideSponsoredMessages
         self.toggleConfirmVoiceSend = toggleConfirmVoiceSend
         self.toggleConfirmVideoSend = toggleConfirmVideoSend
         self.toggleConfirmStickerSend = toggleConfirmStickerSend
@@ -69,6 +77,7 @@ private final class WgramSettingsControllerArguments {
         self.toggleShowPeerIdAndDc = toggleShowPeerIdAndDc
         self.toggleShowMessageSeconds = toggleShowMessageSeconds
         self.toggleKeepAlive = toggleKeepAlive
+        self.selectNotificationSound = selectNotificationSound
         self.toggleTgWsProxy = toggleTgWsProxy
         self.selectTgWsDomain = selectTgWsDomain
         self.toggleTgWsAutoFallback = toggleTgWsAutoFallback
@@ -109,6 +118,8 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
     
     case copyProtectionHeader
     case bypassCopyProtection(Bool)
+    case bypassViewOnce(Bool)
+    case hideSponsoredMessages(Bool)
     case copyProtectionFooter
     
     case confirmationsHeader
@@ -129,6 +140,7 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
     
     case keepAliveHeader
     case keepAlive(Bool)
+    case notificationSound(String)
     case keepAliveFooter
     
     var section: ItemListSectionId {
@@ -139,7 +151,7 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
             return WgramSettingsSection.ghostDetails.rawValue
         case .tgWsProxyHeader, .tgWsProxyMaster, .tgWsDomainSelector, .tgWsAutoFallback, .tgWsProxyFooter:
             return WgramSettingsSection.tgWsProxy.rawValue
-        case .copyProtectionHeader, .bypassCopyProtection, .copyProtectionFooter:
+        case .copyProtectionHeader, .bypassCopyProtection, .bypassViewOnce, .hideSponsoredMessages, .copyProtectionFooter:
             return WgramSettingsSection.copyProtection.rawValue
         case .confirmationsHeader, .confirmVoiceSend, .confirmVideoSend, .confirmStickerSend, .confirmationsFooter:
             return WgramSettingsSection.confirmations.rawValue
@@ -147,7 +159,7 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
             return WgramSettingsSection.historyAndContent.rawValue
         case .uiHeader, .showPeerIdAndDc, .showMessageSeconds, .uiFooter:
             return WgramSettingsSection.uiAndInfo.rawValue
-        case .keepAliveHeader, .keepAlive, .keepAliveFooter:
+        case .keepAliveHeader, .keepAlive, .notificationSound, .keepAliveFooter:
             return WgramSettingsSection.keepAlive.rawValue
         }
     }
@@ -173,23 +185,26 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
         case .tgWsProxyFooter: return 16
         case .copyProtectionHeader: return 17
         case .bypassCopyProtection: return 18
-        case .copyProtectionFooter: return 19
-        case .confirmationsHeader: return 20
-        case .confirmVoiceSend: return 21
-        case .confirmVideoSend: return 22
-        case .confirmStickerSend: return 23
-        case .confirmationsFooter: return 24
-        case .historyHeader: return 25
-        case .antiDelete: return 26
-        case .saveEditHistory: return 27
-        case .historyFooter: return 28
-        case .uiHeader: return 29
-        case .showPeerIdAndDc: return 30
-        case .showMessageSeconds: return 31
-        case .uiFooter: return 32
-        case .keepAliveHeader: return 33
-        case .keepAlive: return 34
-        case .keepAliveFooter: return 35
+        case .bypassViewOnce: return 19
+        case .hideSponsoredMessages: return 20
+        case .copyProtectionFooter: return 21
+        case .confirmationsHeader: return 22
+        case .confirmVoiceSend: return 23
+        case .confirmVideoSend: return 24
+        case .confirmStickerSend: return 25
+        case .confirmationsFooter: return 26
+        case .historyHeader: return 27
+        case .antiDelete: return 28
+        case .saveEditHistory: return 29
+        case .historyFooter: return 30
+        case .uiHeader: return 31
+        case .showPeerIdAndDc: return 32
+        case .showMessageSeconds: return 33
+        case .uiFooter: return 34
+        case .keepAliveHeader: return 35
+        case .keepAlive: return 36
+        case .notificationSound: return 37
+        case .keepAliveFooter: return 38
         }
     }
     
@@ -265,8 +280,16 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: "Снять запрет копирования (No-Forward)", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleBypassCopyProtection(value)
             })
+        case let .bypassViewOnce(value):
+            return ItemListSwitchItem(presentationData: presentationData, title: "Обход самоуничтожения (View-Once)", value: value, sectionId: self.section, style: .blocks, updated: { value in
+                arguments.toggleBypassViewOnce(value)
+            })
+        case let .hideSponsoredMessages(value):
+            return ItemListSwitchItem(presentationData: presentationData, title: "Скрывать рекламу в каналах (No Ads)", value: value, sectionId: self.section, style: .blocks, updated: { value in
+                arguments.toggleHideSponsoredMessages(value)
+            })
         case .copyProtectionFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Разрешает сохранение медиа в галерею, пересылку и копирование текста из защищённых каналов и чатов."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Разрешает сохранение медиа в галерею, пересылку и копирование текста из защищённых каналов, сохраняет одноразовые фото/видео и скрывает рекламу Telegram."), sectionId: self.section)
             
         case .confirmationsHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ЗАЩИТА ОТ СЛУЧАЙНЫХ ДЕЙСТВИЙ (EXTERAGRAM)", sectionId: self.section)
@@ -312,13 +335,26 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
             return ItemListTextItem(presentationData: presentationData, text: .plain("ID и DC отображаются в профиле пользователя или канала (тап копирует ID). Время сообщений выводится в формате ЧЧ:ММ:СС."), sectionId: self.section)
             
         case .keepAliveHeader:
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: "ФОНОВАЯ РАБОТА", sectionId: self.section)
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: "ФОНОВАЯ РАБОТА И УВЕДОМЛЕНИЯ", sectionId: self.section)
         case let .keepAlive(value):
             return ItemListSwitchItem(presentationData: presentationData, title: "Работа в фоне (Keep-Alive)", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleKeepAlive(value)
             })
+        case let .notificationSound(value):
+            let soundLabel: String
+            switch value {
+            case "telegram":
+                soundLabel = "Тритон (Telegram)"
+            case "silent":
+                soundLabel = "Без звука"
+            default:
+                soundLabel = "По умолчанию (iOS)"
+            }
+            return ItemListDisclosureItem(presentationData: presentationData, title: "Звук уведомлений Wgram", label: soundLabel, sectionId: self.section, style: .blocks, action: {
+                arguments.selectNotificationSound()
+            })
         case .keepAliveFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Поддерживает постоянное соединение Telegram с сервером при сворачивании приложения."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Поддерживает постоянное соединение Telegram с сервером при сворачивании приложения и доставляет уведомления без официального push-сервера."), sectionId: self.section)
         }
     }
 }
@@ -333,6 +369,8 @@ private struct WgramSettingsState: Equatable {
     var ghostSend: Bool
     var markReadAfterAction: Bool
     var bypassCopyProtection: Bool
+    var bypassViewOnce: Bool
+    var hideSponsoredMessages: Bool
     var confirmVoiceSend: Bool
     var confirmVideoSend: Bool
     var confirmStickerSend: Bool
@@ -341,6 +379,7 @@ private struct WgramSettingsState: Equatable {
     var showPeerIdAndDc: Bool
     var showMessageSeconds: Bool
     var keepAlive: Bool
+    var notificationSound: String
     var tgWsProxyEnabled: Bool
     var tgWsSelectedDomain: String
     var tgWsCustomDomain: String
@@ -356,6 +395,8 @@ private struct WgramSettingsState: Equatable {
         self.ghostSend = WgramSettings.ghostSend
         self.markReadAfterAction = WgramSettings.markReadAfterAction
         self.bypassCopyProtection = WgramSettings.bypassCopyProtection
+        self.bypassViewOnce = WgramSettings.bypassViewOnce
+        self.hideSponsoredMessages = WgramSettings.hideSponsoredMessages
         self.confirmVoiceSend = WgramSettings.confirmVoiceSend
         self.confirmVideoSend = WgramSettings.confirmVideoSend
         self.confirmStickerSend = WgramSettings.confirmStickerSend
@@ -364,6 +405,7 @@ private struct WgramSettingsState: Equatable {
         self.showPeerIdAndDc = WgramSettings.showPeerIdAndDc
         self.showMessageSeconds = WgramSettings.showMessageSeconds
         self.keepAlive = WgramSettings.keepAliveInBackground
+        self.notificationSound = WgramSettings.notificationSound
         self.tgWsProxyEnabled = WgramSettings.tgWsProxyEnabled
         self.tgWsSelectedDomain = WgramSettings.tgWsSelectedDomain
         self.tgWsCustomDomain = WgramSettings.tgWsCustomDomain
@@ -402,6 +444,8 @@ private func wgramSettingsEntries(presentationData: PresentationData, state: Wgr
     
     entries.append(.copyProtectionHeader)
     entries.append(.bypassCopyProtection(state.bypassCopyProtection))
+    entries.append(.bypassViewOnce(state.bypassViewOnce))
+    entries.append(.hideSponsoredMessages(state.hideSponsoredMessages))
     entries.append(.copyProtectionFooter)
     
     entries.append(.confirmationsHeader)
@@ -422,6 +466,7 @@ private func wgramSettingsEntries(presentationData: PresentationData, state: Wgr
     
     entries.append(.keepAliveHeader)
     entries.append(.keepAlive(state.keepAlive))
+    entries.append(.notificationSound(state.notificationSound))
     entries.append(.keepAliveFooter)
     
     return entries
@@ -485,6 +530,14 @@ public func wgramSettingsController(context: AccountContext) -> ViewController {
             WgramSettings.bypassCopyProtection = value
             updateState { $0.bypassCopyProtection = value }
         },
+        toggleBypassViewOnce: { value in
+            WgramSettings.bypassViewOnce = value
+            updateState { $0.bypassViewOnce = value }
+        },
+        toggleHideSponsoredMessages: { value in
+            WgramSettings.hideSponsoredMessages = value
+            updateState { $0.hideSponsoredMessages = value }
+        },
         toggleConfirmVoiceSend: { value in
             WgramSettings.confirmVoiceSend = value
             updateState { $0.confirmVoiceSend = value }
@@ -517,6 +570,33 @@ public func wgramSettingsController(context: AccountContext) -> ViewController {
             WgramSettings.keepAliveInBackground = value
             updateState { $0.keepAlive = value }
             NotificationCenter.default.post(name: NSNotification.Name("WgramKeepAliveChanged"), object: nil)
+        },
+        selectNotificationSound: {
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+            let actionSheet = ActionSheetController(presentationData: presentationData)
+            var items: [ActionSheetItem] = []
+            items.append(ActionSheetTextItem(title: "Звук уведомлений Wgram"))
+            let sounds = [
+                ("default", "По умолчанию (iOS)"),
+                ("telegram", "Тритон (Telegram)"),
+                ("silent", "Без звука")
+            ]
+            for (key, label) in sounds {
+                items.append(ActionSheetButtonItem(title: label, color: .accent, action: { [weak actionSheet] in
+                    actionSheet?.dismissAnimated()
+                    WgramSettings.notificationSound = key
+                    updateState { $0.notificationSound = key }
+                }))
+            }
+            actionSheet.setItemGroups([
+                ActionSheetItemGroup(items: items),
+                ActionSheetItemGroup(items: [
+                    ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, action: { [weak actionSheet] in
+                        actionSheet?.dismissAnimated()
+                    })
+                ])
+            ])
+            context.sharedContext.mainWindow?.present(actionSheet, on: .root)
         },
         toggleTgWsProxy: { value in
             WgramSettings.tgWsProxyEnabled = value

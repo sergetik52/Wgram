@@ -3043,7 +3043,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 } else {
                     if let (peerId, threadId) = peerIdFromNotification(response.notification) {
                         var messageId: MessageId? = nil
-                        if response.notification.request.content.categoryIdentifier == "c" || response.notification.request.content.categoryIdentifier == "t" {
+                        if response.notification.request.content.categoryIdentifier == "c" || response.notification.request.content.categoryIdentifier == "t" || response.notification.request.content.categoryIdentifier == "r" || response.notification.request.content.categoryIdentifier == "gr" {
                             messageId = messageIdFromNotification(peerId: peerId, notification: response.notification)
                         }
                         let storyId = storyIdFromNotification(peerId: peerId, notification: response.notification)

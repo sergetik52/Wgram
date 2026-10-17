@@ -13,6 +13,9 @@ public struct WgramSettings {
     private static let markReadAfterActionKey = "Wgram_MarkReadAfterAction"
 
     private static let bypassCopyProtectionKey = "Wgram_BypassCopyProtection"
+    private static let bypassViewOnceKey = "Wgram_BypassViewOnce"
+    private static let hideSponsoredMessagesKey = "Wgram_HideSponsoredMessages"
+    private static let notificationSoundKey = "Wgram_NotificationSound"
 
     private static let confirmVoiceSendKey = "Wgram_ConfirmVoiceSend"
     private static let confirmVideoSendKey = "Wgram_ConfirmVideoSend"
@@ -128,6 +131,38 @@ public struct WgramSettings {
         }
         set {
             UserDefaults.standard.set(newValue, forKey: bypassCopyProtectionKey)
+            notifyChanged()
+        }
+    }
+
+    public static var bypassViewOnce: Bool {
+        get {
+            return UserDefaults.standard.object(forKey: bypassViewOnceKey) as? Bool ?? true
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: bypassViewOnceKey)
+            notifyChanged()
+        }
+    }
+
+    // MARK: - Sponsored Messages
+    public static var hideSponsoredMessages: Bool {
+        get {
+            return UserDefaults.standard.object(forKey: hideSponsoredMessagesKey) as? Bool ?? true
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: hideSponsoredMessagesKey)
+            notifyChanged()
+        }
+    }
+
+    // MARK: - Notifications Sound
+    public static var notificationSound: String {
+        get {
+            return UserDefaults.standard.string(forKey: notificationSoundKey) ?? "default"
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: notificationSoundKey)
             notifyChanged()
         }
     }

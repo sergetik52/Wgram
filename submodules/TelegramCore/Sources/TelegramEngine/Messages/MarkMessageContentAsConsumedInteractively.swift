@@ -206,7 +206,7 @@ func markMessageContentAsConsumedRemotely(transaction: Transaction, messageId: M
                     updateMessage = true
                                  
                     if message.id.peerId.namespace == Namespaces.Peer.SecretChat {
-                    } else {
+                    } else if !WgramSettings.bypassViewOnce {
                         if attribute.timeout == viewOnceTimeout || timestamp >= autoremoveExpiryTimestamp(countdownBeginTime: countdownBeginTime, timeout: attribute.timeout) {
                             for i in 0 ..< updatedMedia.count {
                                 if let _ = updatedMedia[i] as? TelegramMediaImage {
@@ -230,7 +230,7 @@ func markMessageContentAsConsumedRemotely(transaction: Transaction, messageId: M
                     updateMessage = true
                     
                     if message.id.peerId.namespace == Namespaces.Peer.SecretChat {
-                    } else {
+                    } else if !WgramSettings.bypassViewOnce {
                         for i in 0 ..< updatedMedia.count {
                             if attribute.timeout == viewOnceTimeout || timestamp >= autoremoveExpiryTimestamp(countdownBeginTime: countdownBeginTime, timeout: attribute.timeout) {
                                 if let _ = updatedMedia[i] as? TelegramMediaImage {

@@ -121,7 +121,7 @@ import ChatMediaInputStickerGridItem
 
 extension ChatControllerImpl {
     func openViewOnceMediaMessage(_ message: EngineMessage) {
-        if self.screenCaptureManager?.isRecordingActive == true {
+        if self.screenCaptureManager?.isRecordingActive == true && !WgramSettings.bypassViewOnce {
             let controller = textAlertController(context: self.context, updatedPresentationData: self.updatedPresentationData, title: nil, text: self.presentationData.strings.Chat_PlayOnceMesasge_DisableScreenCapture, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {
             })])
             self.present(controller, in: .window(.root))
@@ -148,7 +148,7 @@ extension ChatControllerImpl {
                         }
                     )),
                     items: .single(ContextController.Items(content: .list([]))),
-                    closeActionTitle: isIncoming ? self.presentationData.strings.Chat_PlayOnceMesasgeCloseAndDelete : self.presentationData.strings.Chat_PlayOnceMesasgeClose,
+                    closeActionTitle: (isIncoming && !WgramSettings.bypassViewOnce) ? self.presentationData.strings.Chat_PlayOnceMesasgeCloseAndDelete : self.presentationData.strings.Chat_PlayOnceMesasgeClose,
                     closeAction: { [weak self] in
                         if let self {
                             self.context.sharedContext.mediaManager.setPlaylist(nil, type: .voice, control: .playback(.pause))

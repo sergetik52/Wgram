@@ -487,6 +487,9 @@ private class AdMessagesHistoryContextImpl {
         let account = self.account
         let messageId = self.messageId
         
+        if WgramSettings.hideSponsoredMessages {
+            return
+        }
         let signal: Signal<(interPostInterval: Int32?, startDelay: Int32?, betweenDelay: Int32?, messages: [Message]), NoError> = account.postbox.transaction { transaction -> Api.InputPeer? in
             return transaction.getPeer(peerId).flatMap(apiInputPeer)
         }

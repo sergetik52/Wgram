@@ -7796,7 +7796,9 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                     // visible in the foreground, so a recording started behind a covering screen or while
                     // backgrounded is still reported once the chat comes into view.
                     if let strongSelf = self, strongSelf.isApplicationInForegroundValue, strongSelf.traceVisibility() {
-                        let _ = strongSelf.context.engine.messages.addSecretChatMessageScreenshot(peerId: peerId).startStandalone()
+                        if !WgramSettings.bypassViewOnce && !WgramSettings.ghostModeEnabled {
+                            let _ = strongSelf.context.engine.messages.addSecretChatMessageScreenshot(peerId: peerId).startStandalone()
+                        }
                         return true
                     } else {
                         return false
@@ -7830,7 +7832,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                     |> take(1)
                     |> deliverOnMainQueue).startStandalone(next: { [weak self] playlistStateAndType in
                         if let self, let (_, playbackState, _) = playlistStateAndType, case let .state(state) = playbackState {
-                            if let source = state.item.playbackData?.source, case let .telegramFile(_, _, isViewOnce) = source, isViewOnce {
+                            if let source = state.item.playbackData?.source, case let .telegramFile(_, _, isViewOnce) = source, isViewOnce && !WgramSettings.bypassViewOnce {
                                 self.context.sharedContext.mediaManager.setPlaylist(nil, type: .voice, control: .playback(.pause))
                             }
                         }
