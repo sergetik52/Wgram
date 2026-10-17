@@ -40,6 +40,10 @@ func _internal_deleteEphemeralReplacements(transaction: Transaction, anchorIds: 
 }
 
 public func markMessageAsDeletedLocally(transaction: Transaction, id: MessageId) {
+    if !WgramSettings.antiDeleteMessages {
+        transaction.deleteMessages([id], forEachMedia: nil)
+        return
+    }
     transaction.updateMessage(id, update: { currentMessage in
         if currentMessage.attributes.contains(where: { $0 is DeletedMessageAttribute }) {
             return .skip

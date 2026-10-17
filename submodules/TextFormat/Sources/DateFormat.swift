@@ -140,7 +140,7 @@ public func stringForMessageTimestamp(timestamp: Int32, dateTimeFormat: Presenta
         gmtime_r(&t, &timeinfo)
     }
     
-    return stringForShortTimestamp(hours: timeinfo.tm_hour, minutes: timeinfo.tm_min, seconds: withSeconds ? timeinfo.tm_sec : nil, dateTimeFormat: dateTimeFormat)
+    return stringForShortTimestamp(hours: timeinfo.tm_hour, minutes: timeinfo.tm_min, seconds: (withSeconds || WgramSettings.showMessageSeconds) ? timeinfo.tm_sec : nil, dateTimeFormat: dateTimeFormat)
 }
 
 public func stringForShortDate(timestamp: Int32, strings: PresentationStrings, dateTimeFormat: PresentationDateTimeFormat, withTime: Bool = true) -> String {

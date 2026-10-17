@@ -4699,6 +4699,25 @@ func replayFinalState(
                         }
                     }
                     
+                    if WgramSettings.saveEditHistory && previousMessage.text != message.text && !previousMessage.text.isEmpty {
+                        var existingVersions: [EditHistoryVersion] = []
+                        if let historyAttr = previousMessage.attributes.first(where: { $0 is EditHistoryMessageAttribute }) as? EditHistoryMessageAttribute {
+                            existingVersions = historyAttr.versions
+                        }
+                        existingVersions.append(EditHistoryVersion(text: previousMessage.text, timestamp: previousMessage.timestamp))
+                        updatedAttributes.removeAll(where: { $0 is EditHistoryMessageAttribute })
+                        updatedAttributes.append(EditHistoryMessageAttribute(versions: existingVersions))
+                    } else if let historyAttr = previousMessage.attributes.first(where: { $0 is EditHistoryMessageAttribute }) as? EditHistoryMessageAttribute {
+                        updatedAttributes.removeAll(where: { $0 is EditHistoryMessageAttribute })
+                        updatedAttributes.append(historyAttr)
+                    }
+                    
+                    if let deletedAttr = previousMessage.attributes.first(where: { $0 is DeletedMessageAttribute }) as? DeletedMessageAttribute {
+                        if !updatedAttributes.contains(where: { $0 is DeletedMessageAttribute }) {
+                            updatedAttributes.append(deletedAttr)
+                        }
+                    }
+                    
                     if let previousFactCheckAttribute = previousMessage.attributes.first(where: { $0 is FactCheckMessageAttribute }) as? FactCheckMessageAttribute, let updatedFactCheckAttribute = message.attributes.first(where: { $0 is FactCheckMessageAttribute }) as? FactCheckMessageAttribute {
                         if case .Pending = updatedFactCheckAttribute.content, updatedFactCheckAttribute.hash == previousFactCheckAttribute.hash {
                             updatedAttributes.removeAll(where: { $0 is FactCheckMessageAttribute })

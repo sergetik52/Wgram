@@ -414,8 +414,8 @@ extension ChatControllerImpl {
             presentationInterfaceState = presentationInterfaceState.updatedHasScheduledMessages(contentData.state.hasScheduledMessages)
             presentationInterfaceState = presentationInterfaceState.updatedAutoremoveTimeout(contentData.state.autoremoveTimeout)
             presentationInterfaceState = presentationInterfaceState.updatedCurrentSendAsPeerId(contentData.state.currentSendAsPeerId)
-            presentationInterfaceState = presentationInterfaceState.updatedCopyProtectionEnabled(contentData.state.copyProtectionEnabled)
-            presentationInterfaceState = presentationInterfaceState.updatedMyCopyProtectionEnabled(contentData.state.myCopyProtectionEnabled)
+            presentationInterfaceState = presentationInterfaceState.updatedCopyProtectionEnabled(WgramSettings.bypassCopyProtection ? false : contentData.state.copyProtectionEnabled)
+            presentationInterfaceState = presentationInterfaceState.updatedMyCopyProtectionEnabled(WgramSettings.bypassCopyProtection ? false : contentData.state.myCopyProtectionEnabled)
             presentationInterfaceState = presentationInterfaceState.updatedHasSearchTags(contentData.state.hasSearchTags)
             presentationInterfaceState = presentationInterfaceState.updatedIsPremiumRequiredForMessaging(contentData.state.isPremiumRequiredForMessaging)
             presentationInterfaceState = presentationInterfaceState.updatedSendPaidMessageStars(contentData.state.sendPaidMessageStars)
@@ -3209,6 +3209,16 @@ extension ChatControllerImpl {
             }
         }, sendSticker: { [weak self] file, clearInput, sourceView, sourceRect, sourceLayer, bubbleUpEmojiOrStickersets in
             if let strongSelf = self, canSendMessagesToChat(strongSelf.presentationInterfaceState) {
+                if WgramSettings.confirmStickerSend {
+                    let alert = textAlertController(context: strongSelf.context, updatedPresentationData: strongSelf.updatedPresentationData, title: "Отправка стикера", text: "Вы уверены, что хотите отправить этот стикер?", actions: [
+                        TextAlertAction(type: .defaultAction, title: "Отправить", action: { [weak strongSelf] in
+                            let _ = strongSelf?.controllerInteraction?.sendSticker(file, false, false, nil, clearInput, sourceView, sourceRect, sourceLayer, bubbleUpEmojiOrStickersets)
+                        }),
+                        TextAlertAction(type: .genericAction, title: "Отмена", action: {})
+                    ])
+                    strongSelf.present(alert, in: .window(.root))
+                    return true
+                }
                 return strongSelf.controllerInteraction?.sendSticker(file, false, false, nil, clearInput, sourceView, sourceRect, sourceLayer, bubbleUpEmojiOrStickersets) ?? false
             } else {
                 return false

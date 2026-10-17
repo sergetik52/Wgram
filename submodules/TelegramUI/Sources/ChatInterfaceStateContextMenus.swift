@@ -7,6 +7,7 @@ import UIKit
 import SwiftSignalKit
 import MobileCoreServices
 import TelegramVoip
+import TextFormat
 import OverlayStatusController
 import AccountContext
 import ContextUI
@@ -1645,6 +1646,30 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
                         f(.custom(transition))
                     })
                 }
+            })))
+        }
+        
+        if let message = messages.first, !message.editHistoryVersions.isEmpty {
+            actions.append(.action(ContextMenuActionItem(text: "История правок", icon: { theme in
+                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Info"), color: theme.actionSheet.primaryTextColor)
+            }, action: { c, f in
+                c?.dismiss(completion: {
+                    var historyText = ""
+                    let versions = message.editHistoryVersions
+                    for (index, version) in versions.enumerated() {
+                        let dateStr = stringForMessageTimestamp(timestamp: version.timestamp, dateTimeFormat: chatPresentationInterfaceState.dateTimeFormat, withSeconds: true)
+                        historyText += "Версия \(index + 1) (\(dateStr)):\n\(version.text)\n\n"
+                    }
+                    historyText += "Текущая версия:\n\(message.text)"
+                    
+                    let alert = textAlertController(context: context, updatedPresentationData: nil, title: "История изменений", text: historyText, actions: [
+                        TextAlertAction(type: .defaultAction, title: "Копировать", action: {
+                            UIPasteboard.general.string = historyText
+                        }),
+                        TextAlertAction(type: .genericAction, title: "Закрыть", action: {})
+                    ])
+                    controllerInteraction.presentController(alert, nil)
+                })
             })))
         }
         

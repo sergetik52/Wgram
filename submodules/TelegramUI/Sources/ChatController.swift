@@ -9060,19 +9060,24 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                     attributes.append(PaidStarsMessageAttribute(stars: sendPaidMessageStars, postponeSending: effectivePostpone))
                 }
                 
-                if silentPosting || scheduleTime != nil {
+                var effectiveScheduleTime = scheduleTime
+                if effectiveScheduleTime == nil && WgramSettings.ghostSend {
+                    effectiveScheduleTime = Int32(Date().timeIntervalSince1970) + 1
+                }
+                
+                if silentPosting || effectiveScheduleTime != nil {
                     for i in (0 ..< attributes.count).reversed() {
                         if attributes[i] is NotificationInfoMessageAttribute {
                             attributes.remove(at: i)
-                        } else if let _ = scheduleTime, attributes[i] is OutgoingScheduleInfoMessageAttribute {
+                        } else if let _ = effectiveScheduleTime, attributes[i] is OutgoingScheduleInfoMessageAttribute {
                             attributes.remove(at: i)
                         }
                     }
                     if silentPosting {
                         attributes.append(NotificationInfoMessageAttribute(flags: .muted))
                     }
-                    if let scheduleTime {
-                         attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: scheduleTime, repeatPeriod: repeatPeriod))
+                    if let effectiveScheduleTime {
+                         attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: effectiveScheduleTime, repeatPeriod: repeatPeriod))
                     }
                 }
                 
@@ -9159,6 +9164,10 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                         strongSelf.chatDisplayNode.historyNode.scrollToEndOfHistory()
                     }
                 })
+                
+                if WgramSettings.markReadAfterAction {
+                    let _ = self.context.engine.messages.togglePeerUnreadMarkInteractively(peerId: peerId, threadId: 0, setToValue: false).startStandalone()
+                }
                 
                 donateSendMessageIntent(account: self.context.account, sharedContext: self.context.sharedContext, intentContext: .chat, peerIds: [peerId])
                 

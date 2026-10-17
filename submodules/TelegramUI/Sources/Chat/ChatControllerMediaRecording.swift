@@ -263,6 +263,12 @@ extension ChatControllerImpl {
             sendImmediately = true
         }
         
+        if (WgramSettings.confirmVoiceSend && self.audioRecorderValue != nil) || (WgramSettings.confirmVideoSend && self.videoRecorderValue != nil) {
+            if case .send = updatedAction {
+                updatedAction = .preview
+            }
+        }
+        
         if let audioRecorderValue = self.audioRecorderValue {
             switch action {
             case .pause:

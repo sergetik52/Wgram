@@ -16,6 +16,7 @@ import WebUI
 import AvatarNode
 import PeerNameColorItem
 import BoostLevelIconComponent
+import UndoUI
 
 private let enabledPublicBioEntities: EnabledEntityTypes = [.allUrl, .mention, .hashtag]
 private let enabledPrivateBioEntities: EnabledEntityTypes = [.internalUrl, .mention, .hashtag]
@@ -319,6 +320,29 @@ func infoItems(
                         entities = generateTextEntities(note.text, enabledTypes: [.mention, .hashtag, .allUrl], currentEntities: entities)
                     }
                     items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: ItemNote, label: presentationData.strings.PeerInfo_Notes, rightLabel: presentationData.strings.PeerInfo_NotesInfo, text: note.text, entities: entities, handleSpoilers: true, textColor: .primary, textBehavior: .multiLine(maxLines: 100, enabledEntities: []), action: nil, linkItemAction: bioLinkAction, button: nil, contextAction: noteContextAction, requestLayout: { animated in
+                        interaction.requestLayout(animated)
+                    }))
+                }
+                
+                if WgramSettings.showPeerIdAndDc {
+                    let peerIdValue = user.id.id._internalGetInt64Value()
+                    var dcString = ""
+                    if let photo = user.profileImageRepresentations.first, let resource = photo.resource as? CloudFileMediaResource {
+                        let dcId = resource.datacenterId
+                        let dcName: String
+                        switch dcId {
+                        case 1, 3: dcName = "Майами"
+                        case 2, 4: dcName = "Амстердам"
+                        case 5: dcName = "Сингапур"
+                        default: dcName = "DC\(dcId)"
+                        }
+                        dcString = " • DC\(dcId) (\(dcName))"
+                    }
+                    let infoText = "\(peerIdValue)\(dcString)"
+                    items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: 999901, label: "ID & DC", text: infoText, textColor: .primary, action: { _, _ in
+                        UIPasteboard.general.string = "\(peerIdValue)"
+                        interaction.getController()?.present(UndoOverlayController(presentationData: presentationData, content: .copy(text: "ID скопирован в буфер"), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)
+                    }, requestLayout: { animated in
                         interaction.requestLayout(animated)
                     }))
                 }
@@ -689,6 +713,29 @@ func infoItems(
                     items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: ItemAbout, label: presentationData.strings.Channel_Info_Description, text: aboutText, textColor: .primary, textBehavior: .multiLine(maxLines: 100, enabledEntities: enabledEntities), action: isMyProfile ? { node, _ in
                         bioContextAction(node, nil, nil)
                     } : nil, linkItemAction: bioLinkAction, contextAction: bioContextAction, requestLayout: { animated in
+                        interaction.requestLayout(animated)
+                    }))
+                }
+                
+                if WgramSettings.showPeerIdAndDc {
+                    let peerIdValue = channel.id.id._internalGetInt64Value()
+                    var dcString = ""
+                    if let photo = channel.profileImageRepresentations.first, let resource = photo.resource as? CloudFileMediaResource {
+                        let dcId = resource.datacenterId
+                        let dcName: String
+                        switch dcId {
+                        case 1, 3: dcName = "Майами"
+                        case 2, 4: dcName = "Амстердам"
+                        case 5: dcName = "Сингапур"
+                        default: dcName = "DC\(dcId)"
+                        }
+                        dcString = " • DC\(dcId) (\(dcName))"
+                    }
+                    let infoText = "\(peerIdValue)\(dcString)"
+                    items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: 999902, label: "ID & DC", text: infoText, textColor: .primary, action: { _, _ in
+                        UIPasteboard.general.string = "\(peerIdValue)"
+                        interaction.getController()?.present(UndoOverlayController(presentationData: presentationData, content: .copy(text: "ID скопирован в буфер"), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)
+                    }, requestLayout: { animated in
                         interaction.requestLayout(animated)
                     }))
                 }
