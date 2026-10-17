@@ -559,6 +559,10 @@ func initializedNetwork(accountId: AccountRecordId, arguments: NetworkInitializa
                 context.makeTcpConnectionInterface = { delegate, delegateQueue in
                     return WebProxyTransport.shared.makeConnectionInterface(delegate: delegate, delegateQueue: delegateQueue)
                 }
+            } else if WgramSettings.tgWsProxyEnabled {
+                context.makeTcpConnectionInterface = { delegate, delegateQueue in
+                    return WgramWsTransport.shared.makeConnectionInterface(delegate: delegate, delegateQueue: delegateQueue)
+                }
             }
             
             let seedAddressList: [Int: [String]]
@@ -866,6 +870,8 @@ public final class Network: NSObject {
     private let isAppExtension: Bool
     private let webProxyLeaseToken = UUID()
     private let webProxyActive: ValuePromise<Bool>
+    private var isWebProxyActive: Bool = false
+    private var wgramSettingsObserver: NSObjectProtocol?
     private let webProxyCarrierDemandDisposable = MetaDisposable()
     public let useBetaFeatures: Bool
     public let useExperimentalFeatures: Bool
@@ -1062,15 +1068,45 @@ public final class Network: NSObject {
         self.webProxyCarrierDemandDisposable.set(webProxyCarrierDemand.start(next: { wanted in
             WebProxyTransport.shared.setCarrierDemand(leaseToken, wanted: wanted && !leaseIsAppExtension)
         }))
+
+        self.isWebProxyActive = initialWebProxyActive
+        self.wgramSettingsObserver = NotificationCenter.default.addObserver(forName: WgramSettings.didChangeNotification, object: nil, queue: nil) { [weak self] _ in
+            guard let strongSelf = self else { return }
+            strongSelf.queue.async {
+                strongSelf.updateWsProxyState()
+            }
+        }
+    }
+
+    private func updateWsProxyState() {
+        if self.isWebProxyActive {
+            self.context.makeTcpConnectionInterface = { delegate, delegateQueue in
+                return WebProxyTransport.shared.makeConnectionInterface(delegate: delegate, delegateQueue: delegateQueue)
+            }
+        } else if WgramSettings.tgWsProxyEnabled {
+            self.context.makeTcpConnectionInterface = { delegate, delegateQueue in
+                return WgramWsTransport.shared.makeConnectionInterface(delegate: delegate, delegateQueue: delegateQueue)
+            }
+        } else {
+            self.context.makeTcpConnectionInterface = self.baseTcpConnectionInterfaceFactory
+        }
+        self.dropConnectionStatus()
+        self.mainSession.setPaused(true)
+        self.mainSession.setPaused(false)
     }
 
     func updateProxySettings(_ activeServer: ProxyServerSettings?) {
+        self.isWebProxyActive = activeServer?.isWebProxy == true
         let webConfiguration = activeServer?.webProxyConfiguration
         WebProxyTransport.shared.apply(configuration: self.isAppExtension ? nil : webConfiguration)
         self.webProxyActive.set(activeServer?.isWebProxy == true)
         if activeServer?.isWebProxy == true {
             self.context.makeTcpConnectionInterface = { delegate, delegateQueue in
                 return WebProxyTransport.shared.makeConnectionInterface(delegate: delegate, delegateQueue: delegateQueue)
+            }
+        } else if WgramSettings.tgWsProxyEnabled {
+            self.context.makeTcpConnectionInterface = { delegate, delegateQueue in
+                return WgramWsTransport.shared.makeConnectionInterface(delegate: delegate, delegateQueue: delegateQueue)
             }
         } else {
             self.context.makeTcpConnectionInterface = self.baseTcpConnectionInterfaceFactory
@@ -1106,6 +1142,9 @@ public final class Network: NSObject {
         self.isUserOnlineDisposable.dispose()
         self.webProxyCarrierDemandDisposable.dispose()
         WebProxyTransport.shared.setCarrierDemand(self.webProxyLeaseToken, wanted: false)
+        if let observer = self.wgramSettingsObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
         self.appDataDisposable.dispose()
     }
     

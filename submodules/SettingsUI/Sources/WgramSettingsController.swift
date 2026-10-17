@@ -26,6 +26,9 @@ private final class WgramSettingsControllerArguments {
     let toggleShowPeerIdAndDc: (Bool) -> Void
     let toggleShowMessageSeconds: (Bool) -> Void
     let toggleKeepAlive: (Bool) -> Void
+    let toggleTgWsProxy: (Bool) -> Void
+    let selectTgWsDomain: () -> Void
+    let toggleTgWsAutoFallback: (Bool) -> Void
     
     init(
         toggleGhostMode: @escaping (Bool) -> Void,
@@ -44,7 +47,10 @@ private final class WgramSettingsControllerArguments {
         toggleSaveEditHistory: @escaping (Bool) -> Void,
         toggleShowPeerIdAndDc: @escaping (Bool) -> Void,
         toggleShowMessageSeconds: @escaping (Bool) -> Void,
-        toggleKeepAlive: @escaping (Bool) -> Void
+        toggleKeepAlive: @escaping (Bool) -> Void,
+        toggleTgWsProxy: @escaping (Bool) -> Void,
+        selectTgWsDomain: @escaping () -> Void,
+        toggleTgWsAutoFallback: @escaping (Bool) -> Void
     ) {
         self.toggleGhostMode = toggleGhostMode
         self.toggleDontReadMessages = toggleDontReadMessages
@@ -63,12 +69,16 @@ private final class WgramSettingsControllerArguments {
         self.toggleShowPeerIdAndDc = toggleShowPeerIdAndDc
         self.toggleShowMessageSeconds = toggleShowMessageSeconds
         self.toggleKeepAlive = toggleKeepAlive
+        self.toggleTgWsProxy = toggleTgWsProxy
+        self.selectTgWsDomain = selectTgWsDomain
+        self.toggleTgWsAutoFallback = toggleTgWsAutoFallback
     }
 }
 
 private enum WgramSettingsSection: Int32 {
     case ghostMaster
     case ghostDetails
+    case tgWsProxy
     case copyProtection
     case confirmations
     case historyAndContent
@@ -90,6 +100,12 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
     case ghostSend(Bool, Bool)
     case markReadAfterAction(Bool, Bool)
     case detailsFooter
+    
+    case tgWsProxyHeader
+    case tgWsProxyMaster(Bool)
+    case tgWsDomainSelector(String, Bool)
+    case tgWsAutoFallback(Bool, Bool)
+    case tgWsProxyFooter
     
     case copyProtectionHeader
     case bypassCopyProtection(Bool)
@@ -121,6 +137,8 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
             return WgramSettingsSection.ghostMaster.rawValue
         case .detailsHeader, .dontReadMessages, .dontSendTyping, .dontUpdateOnline, .dontReadStories, .dontReadMedia, .ghostSend, .markReadAfterAction, .detailsFooter:
             return WgramSettingsSection.ghostDetails.rawValue
+        case .tgWsProxyHeader, .tgWsProxyMaster, .tgWsDomainSelector, .tgWsAutoFallback, .tgWsProxyFooter:
+            return WgramSettingsSection.tgWsProxy.rawValue
         case .copyProtectionHeader, .bypassCopyProtection, .copyProtectionFooter:
             return WgramSettingsSection.copyProtection.rawValue
         case .confirmationsHeader, .confirmVoiceSend, .confirmVideoSend, .confirmStickerSend, .confirmationsFooter:
@@ -148,25 +166,30 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
         case .ghostSend: return 9
         case .markReadAfterAction: return 10
         case .detailsFooter: return 11
-        case .copyProtectionHeader: return 12
-        case .bypassCopyProtection: return 13
-        case .copyProtectionFooter: return 14
-        case .confirmationsHeader: return 15
-        case .confirmVoiceSend: return 16
-        case .confirmVideoSend: return 17
-        case .confirmStickerSend: return 18
-        case .confirmationsFooter: return 19
-        case .historyHeader: return 20
-        case .antiDelete: return 21
-        case .saveEditHistory: return 22
-        case .historyFooter: return 23
-        case .uiHeader: return 24
-        case .showPeerIdAndDc: return 25
-        case .showMessageSeconds: return 26
-        case .uiFooter: return 27
-        case .keepAliveHeader: return 28
-        case .keepAlive: return 29
-        case .keepAliveFooter: return 30
+        case .tgWsProxyHeader: return 12
+        case .tgWsProxyMaster: return 13
+        case .tgWsDomainSelector: return 14
+        case .tgWsAutoFallback: return 15
+        case .tgWsProxyFooter: return 16
+        case .copyProtectionHeader: return 17
+        case .bypassCopyProtection: return 18
+        case .copyProtectionFooter: return 19
+        case .confirmationsHeader: return 20
+        case .confirmVoiceSend: return 21
+        case .confirmVideoSend: return 22
+        case .confirmStickerSend: return 23
+        case .confirmationsFooter: return 24
+        case .historyHeader: return 25
+        case .antiDelete: return 26
+        case .saveEditHistory: return 27
+        case .historyFooter: return 28
+        case .uiHeader: return 29
+        case .showPeerIdAndDc: return 30
+        case .showMessageSeconds: return 31
+        case .uiFooter: return 32
+        case .keepAliveHeader: return 33
+        case .keepAlive: return 34
+        case .keepAliveFooter: return 35
         }
     }
     
@@ -218,6 +241,23 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
             })
         case .detailsFooter:
             return ItemListTextItem(presentationData: presentationData, text: .plain("Ghost Send отправляет сообщения как отложенные (+1 сек), благодаря чему Telegram доставляет их мгновенно, но не переводит ваш аккаунт в онлайн."), sectionId: self.section)
+            
+        case .tgWsProxyHeader:
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: "TG WS ПРОКСИ (ОБХОД БЛОКИРОВОК)", sectionId: self.section)
+        case let .tgWsProxyMaster(value):
+            return ItemListSwitchItem(presentationData: presentationData, title: "Включить TG WS Прокси", value: value, sectionId: self.section, style: .blocks, updated: { value in
+                arguments.toggleTgWsProxy(value)
+            })
+        case let .tgWsDomainSelector(domain, enabled):
+            return ItemListDisclosureItem(presentationData: presentationData, title: "Зеркало / Сервер", enabled: enabled, label: domain, sectionId: self.section, style: .blocks, action: {
+                arguments.selectTgWsDomain()
+            })
+        case let .tgWsAutoFallback(value, enabled):
+            return ItemListSwitchItem(presentationData: presentationData, title: "Авто-переключение зеркал", value: value, enabled: enabled, sectionId: self.section, style: .blocks, updated: { value in
+                arguments.toggleTgWsAutoFallback(value)
+            })
+        case .tgWsProxyFooter:
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Позволяет Telegram работать без VPN через WebSocket поверх Cloudflare TLS. Трафик маскируется под обычный веб-сайт и не блокируется провайдерами."), sectionId: self.section)
             
         case .copyProtectionHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ЗАПРЕТЫ И ОГРАНИЧЕНИЯ", sectionId: self.section)
@@ -301,6 +341,10 @@ private struct WgramSettingsState: Equatable {
     var showPeerIdAndDc: Bool
     var showMessageSeconds: Bool
     var keepAlive: Bool
+    var tgWsProxyEnabled: Bool
+    var tgWsSelectedDomain: String
+    var tgWsCustomDomain: String
+    var tgWsAutoFallback: Bool
     
     init() {
         self.ghostModeEnabled = WgramSettings.ghostModeEnabled
@@ -320,6 +364,10 @@ private struct WgramSettingsState: Equatable {
         self.showPeerIdAndDc = WgramSettings.showPeerIdAndDc
         self.showMessageSeconds = WgramSettings.showMessageSeconds
         self.keepAlive = WgramSettings.keepAliveInBackground
+        self.tgWsProxyEnabled = WgramSettings.tgWsProxyEnabled
+        self.tgWsSelectedDomain = WgramSettings.tgWsSelectedDomain
+        self.tgWsCustomDomain = WgramSettings.tgWsCustomDomain
+        self.tgWsAutoFallback = WgramSettings.tgWsAutoFallback
     }
 }
 
@@ -339,6 +387,18 @@ private func wgramSettingsEntries(presentationData: PresentationData, state: Wgr
     entries.append(.ghostSend(state.ghostSend, state.ghostModeEnabled))
     entries.append(.markReadAfterAction(state.markReadAfterAction, state.ghostModeEnabled))
     entries.append(.detailsFooter)
+    
+    entries.append(.tgWsProxyHeader)
+    entries.append(.tgWsProxyMaster(state.tgWsProxyEnabled))
+    let domainLabel: String
+    if state.tgWsSelectedDomain == "custom" {
+        domainLabel = state.tgWsCustomDomain.isEmpty ? "Свой домен" : state.tgWsCustomDomain
+    } else {
+        domainLabel = state.tgWsSelectedDomain
+    }
+    entries.append(.tgWsDomainSelector(domainLabel, state.tgWsProxyEnabled))
+    entries.append(.tgWsAutoFallback(state.tgWsAutoFallback, state.tgWsProxyEnabled))
+    entries.append(.tgWsProxyFooter)
     
     entries.append(.copyProtectionHeader)
     entries.append(.bypassCopyProtection(state.bypassCopyProtection))
@@ -457,12 +517,72 @@ public func wgramSettingsController(context: AccountContext) -> ViewController {
             WgramSettings.keepAliveInBackground = value
             updateState { $0.keepAlive = value }
             NotificationCenter.default.post(name: NSNotification.Name("WgramKeepAliveChanged"), object: nil)
+        },
+        toggleTgWsProxy: { value in
+            WgramSettings.tgWsProxyEnabled = value
+            updateState { $0.tgWsProxyEnabled = value }
+        },
+        selectTgWsDomain: {
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+            let actionSheet = ActionSheetController(presentationData: presentationData)
+            var items: [ActionSheetItem] = []
+            items.append(ActionSheetTextItem(title: "Выберите зеркало TG WS"))
+            let domains = [
+                ("noskomnadzor.co.uk", "noskomnadzor.co.uk (Cloudflare)"),
+                ("cakeisalie.co.uk", "cakeisalie.co.uk (Cloudflare)"),
+                ("kartoshka.co.uk", "kartoshka.co.uk (Cloudflare)"),
+                ("pclead.co.uk", "pclead.co.uk (Cloudflare)"),
+                ("pomogite.co.uk", "pomogite.co.uk (Cloudflare)"),
+                ("web.telegram.org", "web.telegram.org (Прямое WSS)"),
+                ("custom", "Свой воркер / домен...")
+            ]
+            for (key, label) in domains {
+                items.append(ActionSheetButtonItem(title: label, color: .accent, action: { [weak actionSheet] in
+                    actionSheet?.dismissAnimated()
+                    if key == "custom" {
+                        let alert = UIAlertController(title: "Свой домен", message: "Введите домен Cloudflare Worker или прокси:", preferredStyle: .alert)
+                        alert.addTextField { textField in
+                            textField.placeholder = "example.workers.dev"
+                            textField.text = WgramSettings.tgWsCustomDomain
+                        }
+                        alert.addAction(UIAlertAction(title: "Отмена", style: .cancel))
+                        alert.addAction(UIAlertAction(title: "Сохранить", style: .default, handler: { _ in
+                            let text = alert.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                            WgramSettings.tgWsCustomDomain = text
+                            WgramSettings.tgWsSelectedDomain = "custom"
+                            updateState {
+                                $0.tgWsCustomDomain = text
+                                $0.tgWsSelectedDomain = "custom"
+                            }
+                        }))
+                        context.sharedContext.applicationBindings.presentNativeController(alert)
+                    } else {
+                        WgramSettings.tgWsSelectedDomain = key
+                        updateState {
+                            $0.tgWsSelectedDomain = key
+                        }
+                    }
+                }))
+            }
+            actionSheet.setItemGroups([
+                ActionSheetItemGroup(items: items),
+                ActionSheetItemGroup(items: [
+                    ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, action: { [weak actionSheet] in
+                        actionSheet?.dismissAnimated()
+                    })
+                ])
+            ])
+            context.sharedContext.mainWindow?.present(actionSheet, on: .root)
+        },
+        toggleTgWsAutoFallback: { value in
+            WgramSettings.tgWsAutoFallback = value
+            updateState { $0.tgWsAutoFallback = value }
         }
     )
     
     let signal = combineLatest(context.sharedContext.presentationData, statePromise.get())
-    |> map { presentationData, state -> (ItemListControllerState, (ItemListNodeState, Any)) in
-        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Wgram Настройки"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
+    |> map { presentationData, state -> (ItemListControllerState, (ItemListNodeState, WgramSettingsControllerArguments)) in
+        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Настройки Wgram"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: wgramSettingsEntries(presentationData: presentationData, state: state), style: .blocks, animateChanges: false)
         return (controllerState, (listState, arguments))
     }

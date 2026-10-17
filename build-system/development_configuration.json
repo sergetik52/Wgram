@@ -1,0 +1,14 @@
+{
+	"bundle_id": "com.amymusic.app",
+	"api_id": "39050251",
+	"api_hash": "06786d0c15aaa0b5a81e5634c67f27c0",
+	"team_id": "M5LW4HM9AJ",
+	"app_center_id": "0",
+	"is_internal_build": "true",
+	"is_appstore_build": "false",
+	"appstore_id": "0",
+	"app_specific_url_scheme": "tg",
+	"premium_iap_product_id": "",
+	"enable_siri": false,
+	"enable_icloud": false
+}

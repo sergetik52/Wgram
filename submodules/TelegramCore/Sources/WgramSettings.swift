@@ -26,6 +26,11 @@ public struct WgramSettings {
 
     private static let keepAliveInBackgroundKey = "Wgram_KeepAliveInBackground"
 
+    private static let tgWsProxyEnabledKey = "Wgram_TgWsProxyEnabled"
+    private static let tgWsSelectedDomainKey = "Wgram_TgWsSelectedDomain"
+    private static let tgWsCustomDomainKey = "Wgram_TgWsCustomDomain"
+    private static let tgWsAutoFallbackKey = "Wgram_TgWsAutoFallback"
+
     private static func notifyChanged() {
         NotificationCenter.default.post(name: didChangeNotification, object: nil)
     }
@@ -197,6 +202,39 @@ public struct WgramSettings {
         get { UserDefaults.standard.bool(forKey: keepAliveInBackgroundKey) }
         set {
             UserDefaults.standard.set(newValue, forKey: keepAliveInBackgroundKey)
+            notifyChanged()
+        }
+    }
+
+    // MARK: - TG WS Proxy
+    public static var tgWsProxyEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: tgWsProxyEnabledKey) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: tgWsProxyEnabledKey)
+            notifyChanged()
+        }
+    }
+
+    public static var tgWsSelectedDomain: String {
+        get { UserDefaults.standard.string(forKey: tgWsSelectedDomainKey) ?? "noskomnadzor.co.uk" }
+        set {
+            UserDefaults.standard.set(newValue, forKey: tgWsSelectedDomainKey)
+            notifyChanged()
+        }
+    }
+
+    public static var tgWsCustomDomain: String {
+        get { UserDefaults.standard.string(forKey: tgWsCustomDomainKey) ?? "" }
+        set {
+            UserDefaults.standard.set(newValue, forKey: tgWsCustomDomainKey)
+            notifyChanged()
+        }
+    }
+
+    public static var tgWsAutoFallback: Bool {
+        get { UserDefaults.standard.object(forKey: tgWsAutoFallbackKey) as? Bool ?? true }
+        set {
+            UserDefaults.standard.set(newValue, forKey: tgWsAutoFallbackKey)
             notifyChanged()
         }
     }
