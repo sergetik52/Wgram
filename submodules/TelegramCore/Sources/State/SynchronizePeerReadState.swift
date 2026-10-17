@@ -283,6 +283,9 @@ private func pushPeerReadState(network: Network, postbox: Postbox, stateManager:
         |> mapToSignal { inputPeer -> Signal<PeerReadState, PeerReadStateValidationError> in
             switch inputPeer {
             case let .inputPeerChannel(inputPeerChannelData):
+                if WgramSettings.dontReadMessages {
+                    return Signal<PeerReadState, PeerReadStateValidationError>.single(readState)
+                }
                 let (channelId, accessHash) = (inputPeerChannelData.channelId, inputPeerChannelData.accessHash)
                 switch readState {
                 case let .idBased(maxIncomingReadId, _, _, _, markedUnread):

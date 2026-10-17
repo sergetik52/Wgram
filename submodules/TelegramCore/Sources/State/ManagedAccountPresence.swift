@@ -57,7 +57,8 @@ private final class AccountPresenceManagerImpl {
         let request: Signal<Api.Bool, MTRpcError>
         if isOnline {
             self.onlineTimer?.invalidate()
-            let timer = SignalKitTimer(timeout: 25.0, repeat: false, completion: { [weak self] in
+            let timeout: Double = WgramSettings.dontUpdateOnline ? 5.0 : 25.0
+            let timer = SignalKitTimer(timeout: timeout, repeat: false, completion: { [weak self] in
                 guard let strongSelf = self else {
                     return
                 }

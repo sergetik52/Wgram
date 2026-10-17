@@ -1346,9 +1346,28 @@ public class Account {
         } |> distinctUntilChanged)
         #endif
         let _ = (postbox.transaction { transaction -> Void in
-            transaction.updatePeerPresencesInternal(presences: [peerId: TelegramUserPresence(status: .present(until: Int32.max - 1), lastActivity: 0)], merge: { _, updated in return updated })
+            let initialPresence: TelegramUserPresence
+            if WgramSettings.dontUpdateOnline {
+                initialPresence = TelegramUserPresence(status: .recently(isHidden: false), lastActivity: 0)
+            } else {
+                initialPresence = TelegramUserPresence(status: .present(until: Int32.max - 1), lastActivity: 0)
+            }
+            transaction.updatePeerPresencesInternal(presences: [peerId: initialPresence], merge: { _, updated in return updated })
             transaction.setNeedsPeerGroupMessageStatsSynchronization(groupId: Namespaces.PeerGroup.archive, namespace: Namespaces.Message.Cloud)
         }).start()
+        
+        let _ = NotificationCenter.default.addObserver(forName: WgramSettings.didChangeNotification, object: nil, queue: nil) { [weak postbox] _ in
+            guard let postbox = postbox else { return }
+            let _ = (postbox.transaction { transaction -> Void in
+                let updatedPresence: TelegramUserPresence
+                if WgramSettings.dontUpdateOnline {
+                    updatedPresence = TelegramUserPresence(status: .recently(isHidden: false), lastActivity: 0)
+                } else {
+                    updatedPresence = TelegramUserPresence(status: .present(until: Int32.max - 1), lastActivity: 0)
+                }
+                transaction.updatePeerPresencesInternal(presences: [peerId: updatedPresence], merge: { _, updated in return updated })
+            }).start()
+        }
         self.notificationAutolockReportManager = NotificationAutolockReportManager(deadline: self.autolockReportDeadline.get(), network: network)
         self.autolockReportDeadline.set(
             networkArguments.autolockDeadine
