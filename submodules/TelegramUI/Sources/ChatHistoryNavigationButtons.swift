@@ -158,7 +158,7 @@ final class ChatHistoryNavigationButtons: ASDisplayNode {
             self?.mentionsPressed?()
         }
         
-        self.downButton.isGestureEnabled = false
+        self.downButton.isGestureEnabled = true
         self.upButton.isGestureEnabled = false
     }
     

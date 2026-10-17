@@ -348,7 +348,7 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
     }
     
     private func transcribe() {
-        guard let arguments = self.arguments, let context = self.context, let message = self.message else {
+        guard self.arguments != nil, let context = self.context, let message = self.message else {
             return
         }
         
@@ -357,43 +357,7 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
         }
         
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        let premiumConfiguration = PremiumConfiguration.with(appConfiguration: arguments.context.currentAppConfiguration.with { $0 })
-        
-        let transcriptionText = self.forcedAudioTranscriptionText ?? transcribedText(message: EngineMessage(message))
-        if transcriptionText == nil && !arguments.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
-            if premiumConfiguration.audioTransciptionTrialCount > 0 {
-                if !arguments.associatedData.isPremium {
-                    if self.presentAudioTranscriptionTooltip(finished: false) {
-                        return
-                    }
-                }
-            } else {
-                guard arguments.associatedData.isPremium else {
-                    if self.hapticFeedback == nil {
-                        self.hapticFeedback = HapticFeedback()
-                    }
-                    self.hapticFeedback?.impact(.medium)
-                    
-                    let tipController = UndoOverlayController(presentationData: presentationData, content: .universal(animation: "anim_voiceToText", scale: 0.065, colors: [:], title: nil, text: presentationData.strings.Message_AudioTranscription_SubscribeToPremium, customUndoText: presentationData.strings.Message_AudioTranscription_SubscribeToPremiumAction, timeout: nil), elevatedLayout: false, position: .top, animateInAsReplacement: false, action: { action in
-                        if case .undo = action {
-                            var replaceImpl: ((ViewController) -> Void)?
-                            let controller = context.sharedContext.makePremiumDemoController(context: context, subject: .voiceToText, forceDark: false, action: {
-                                let controller = context.sharedContext.makePremiumIntroController(context: context, source: .settings, forceDark: false, dismissed: nil)
-                                replaceImpl?(controller)
-                            }, dismissed: nil)
-                            replaceImpl = { [weak controller] c in
-                                controller?.replace(with: c)
-                            }
-                            arguments.controllerInteraction.navigationController()?.pushViewController(controller, animated: true)
-                            
-                            let _ = ApplicationSpecificNotice.incrementAudioTranscriptionSuggestion(accountManager: context.sharedContext.accountManager).startStandalone()
-                        }
-                        return false })
-                    arguments.controllerInteraction.presentControllerInCurrent(tipController, nil)
-                    return
-                }
-            }
-        }
+        // Free Speech-to-Text: allow all users to transcribe without Premium
         
         var shouldBeginTranscription = false
         var shouldExpandNow = false
@@ -419,7 +383,7 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                 self.audioTranscriptionState = .inProgress
                 self.requestUpdateLayout(true)
                 
-                if context.sharedContext.immediateExperimentalUISettings.localTranscription {
+                if true {
                     let appLocale = presentationData.strings.baseLanguageCode
                     
                     let signal: Signal<LocallyTranscribedAudio?, NoError> = context.engine.data.get(TelegramEngine.EngineData.Item.Messages.Message(id: message.id))
@@ -639,7 +603,6 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                 var audioWaveform: AudioWaveform?
                 var isVoice = false
                 var audioDuration: Int32 = 0
-                var isConsumed: Bool?
                 
                 var consumableContentIcon: UIImage?
                 for attribute in arguments.message.attributes {
@@ -651,7 +614,6 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                                 consumableContentIcon = PresentationResourcesChat.chatBubbleConsumableContentOutgoingIcon(arguments.presentationData.theme.theme)
                             }
                         }
-                        isConsumed = attribute.consumed
                         break
                     }
                 }
@@ -770,22 +732,7 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                 if Namespaces.Message.allNonRegular.contains(arguments.message.id.namespace) {
                     displayTranscribe = false
                 } else if arguments.message.id.peerId.namespace != Namespaces.Peer.SecretChat && !isViewOnceMessage && !arguments.presentationData.isPreview {
-                    let premiumConfiguration = PremiumConfiguration.with(appConfiguration: arguments.context.currentAppConfiguration.with { $0 })
-                    if arguments.associatedData.isPremium || arguments.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
-                        displayTranscribe = true
-                    } else if premiumConfiguration.audioTransciptionTrialCount > 0 {
-                        if arguments.incoming {
-                            if audioDuration < premiumConfiguration.audioTransciptionTrialMaxDuration {
-                                displayTranscribe = true
-                            }
-                        }
-                    } else if arguments.associatedData.alwaysDisplayTranscribeButton.canBeDisplayed {
-                        if audioDuration >= 60 {
-                            displayTranscribe = true
-                        } else if arguments.incoming && isConsumed == false && arguments.associatedData.alwaysDisplayTranscribeButton.displayForNotConsumed {
-                            displayTranscribe = true
-                        }
-                    }
+                    displayTranscribe = true
                 }
                 
                 let transcribedText = forcedAudioTranscriptionText ?? transcribedText(message: EngineMessage(arguments.message))

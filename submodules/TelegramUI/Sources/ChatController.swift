@@ -6447,6 +6447,24 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         self.chatTitleView?.tapAction = { [weak self] in
             self?.navigationButtonAction(.openChatInfo(expandAvatar: false, section: nil))
         }
+        self.chatTitleView?.longTapAction = { [weak self] in
+            guard let self else { return }
+            let actionSheet = ActionSheetController(presentationData: self.presentationData)
+            actionSheet.setItemGroups([
+                ActionSheetItemGroup(items: [
+                    ActionSheetButtonItem(title: "К самому первому сообщению", color: .accent, action: { [weak self, weak actionSheet] in
+                        actionSheet?.dismissAnimated()
+                        self?.navigateToBeginning()
+                    })
+                ]),
+                ActionSheetItemGroup(items: [
+                    ActionSheetButtonItem(title: self.presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak actionSheet] in
+                        actionSheet?.dismissAnimated()
+                    })
+                ])
+            ])
+            self.present(actionSheet, in: .window(.root))
+        }
         
         self.updateChatPresentationInterfaceState(animated: false, interactive: false, { state in
             if let botStart = botStart, case .interactive = botStart.behavior {

@@ -41,13 +41,6 @@ private func transcribeAudio(path: String, locale: String) -> Signal<Transcripti
                             speechRecognizerValue.defaultTaskHint = .dictation
                             sharedRecognizers[locale] = speechRecognizerValue
                             speechRecognizer = speechRecognizerValue
-                            
-                            if locale == "en-US" {
-                                speechRecognizer.supportsOnDeviceRecognition = true
-                            } else {
-                                speechRecognizer.supportsOnDeviceRecognition = false
-                            }
-                            speechRecognizer.supportsOnDeviceRecognition = true
                         }
                         
                         let tempFilePath = NSTemporaryDirectory() + "/\(UInt64.random(in: 0 ... UInt64.max)).m4a"
@@ -57,7 +50,7 @@ private func transcribeAudio(path: String, locale: String) -> Signal<Transcripti
                         if #available(iOS 16.0, *) {
                             request.addsPunctuation = true
                         }
-                        request.requiresOnDeviceRecognition = speechRecognizer.supportsOnDeviceRecognition
+                        request.requiresOnDeviceRecognition = false
                         request.shouldReportPartialResults = false
                         
                         let task = speechRecognizer.recognitionTask(with: request, resultHandler: { result, error in
@@ -70,11 +63,13 @@ private func transcribeAudio(path: String, locale: String) -> Signal<Transcripti
                                 subscriber.putNext(TranscriptionResult(text: result.bestTranscription.formattedString, confidence: confidence, isFinal: result.isFinal))
                                 
                                 if result.isFinal {
+                                    let _ = try? FileManager.default.removeItem(atPath: tempFilePath)
                                     subscriber.putCompletion()
                                 }
                             } else {
                                 print("transcribeAudio: locale: \(locale), error: \(String(describing: error))")
                                 
+                                let _ = try? FileManager.default.removeItem(atPath: tempFilePath)
                                 subscriber.putNext(nil)
                                 subscriber.putCompletion()
                             }
@@ -82,6 +77,7 @@ private func transcribeAudio(path: String, locale: String) -> Signal<Transcripti
                         
                         disposable.set(ActionDisposable {
                             task.cancel()
+                            let _ = try? FileManager.default.removeItem(atPath: tempFilePath)
                         })
                     @unknown default:
                         subscriber.putNext(nil)
@@ -109,6 +105,15 @@ public func transcribeAudio(path: String, appLocale: String) -> Signal<LocallyTr
     var locales: [String] = []
     if !locales.contains(Locale.current.identifier) {
         locales.append(Locale.current.identifier)
+    }
+    if !appLocale.isEmpty && !locales.contains(appLocale) {
+        locales.append(appLocale)
+    }
+    if appLocale == "ru" && !locales.contains("ru-RU") {
+        locales.append("ru-RU")
+    }
+    if appLocale == "en" && !locales.contains("en-US") {
+        locales.append("en-US")
     }
     if locales.isEmpty {
         locales.append("en-US")

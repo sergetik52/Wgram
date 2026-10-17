@@ -1380,6 +1380,52 @@ extension ChatControllerImpl {
                 }
             }
         }
+        
+        self.chatDisplayNode.navigateButtons.downButton.activated = { [weak self] gesture, _ in
+            guard let strongSelf = self else {
+                gesture.cancel()
+                return
+            }
+            
+            var menuItems: [ContextMenuItem] = []
+            menuItems.append(.action(ContextMenuActionItem(
+                id: nil,
+                text: "К самому первому сообщению",
+                textColor: .primary,
+                textLayout: .singleLine,
+                icon: { theme in
+                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/GoToMessage"), color: theme.contextMenu.primaryColor)
+                },
+                action: { [weak strongSelf] _, f in
+                    f(.dismissWithoutContent)
+                    strongSelf?.navigateToBeginning()
+                }
+            )))
+            menuItems.append(.action(ContextMenuActionItem(
+                id: nil,
+                text: "В самый низ",
+                textColor: .primary,
+                textLayout: .singleLine,
+                icon: { theme in
+                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Down"), color: theme.contextMenu.primaryColor)
+                },
+                action: { [weak strongSelf] _, f in
+                    f(.dismissWithoutContent)
+                    strongSelf?.scrollToEndOfHistory()
+                }
+            )))
+            let items = ContextController.Items(content: .list(menuItems))
+            let controller = makeContextController(presentationData: strongSelf.presentationData, source: .extracted(ChatMessageNavigationButtonContextExtractedContentSource(chatNode: strongSelf.chatDisplayNode, contentNode: strongSelf.chatDisplayNode.navigateButtons.downButton.containerNode)), items: .single(items), recognizer: nil, gesture: gesture)
+            
+            strongSelf.forEachController({ controller in
+                if let controller = controller as? TooltipScreen {
+                    controller.dismiss()
+                }
+                return true
+            })
+            strongSelf.window?.presentInGlobalOverlay(controller)
+        }
+        
         self.chatDisplayNode.navigateButtons.upPressed = { [weak self] in
             guard let self else {
                 return

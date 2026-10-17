@@ -30,6 +30,7 @@ import ChatControllerInteraction
 import WallpaperBackgroundNode
 import TelegramStringFormatting
 import InvisibleInkDustNode
+import LocalAudioTranscription
 
 public struct ChatMessageInstantVideoItemLayoutResult {
     public let contentSize: CGSize
@@ -828,20 +829,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                                                             
                     var displayTranscribe = false
                     if item.message.id.peerId.namespace != Namespaces.Peer.SecretChat && statusDisplayType == .free && !isViewOnceMessage && !item.presentationData.isPreview {
-                        let premiumConfiguration = PremiumConfiguration.with(appConfiguration: item.context.currentAppConfiguration.with { $0 })
-                        if item.associatedData.isPremium || item.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
-                            displayTranscribe = true
-                        } else if premiumConfiguration.audioTransciptionTrialCount > 0 {
-                            if incoming {
-                                displayTranscribe = true
-                            }
-                        } else if item.associatedData.alwaysDisplayTranscribeButton.canBeDisplayed {
-                            if incoming && notConsumed && item.associatedData.alwaysDisplayTranscribeButton.displayForNotConsumed {
-                                displayTranscribe = true
-                            } else {
-                                displayTranscribe = false
-                            }
-                        }
+                        displayTranscribe = true
                     }
                     
                     if displayTranscribe, let durationBlurColor = durationBlurColor {
@@ -1813,49 +1801,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
             return
         }
         
-        if !item.context.isPremium, case .inProgress = self.audioTranscriptionState {
-            return
-        }
-        
         let presentationData = item.context.sharedContext.currentPresentationData.with { $0 }
-        let premiumConfiguration = PremiumConfiguration.with(appConfiguration: item.context.currentAppConfiguration.with { $0 })
-        
-        let transcriptionText = transcribedText(message: EngineMessage(item.message))
-        if transcriptionText == nil && !item.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
-            if premiumConfiguration.audioTransciptionTrialCount > 0 {
-                if !item.associatedData.isPremium {
-                    if self.presentAudioTranscriptionTooltip(finished: false) {
-                        return
-                    }
-                }
-            } else {
-                guard item.associatedData.isPremium else {
-                    if self.hapticFeedback == nil {
-                        self.hapticFeedback = HapticFeedback()
-                    }
-                    self.hapticFeedback?.impact(.medium)
-                    
-                    let tipController = UndoOverlayController(presentationData: presentationData, content: .universal(animation: "anim_voiceToText", scale: 0.065, colors: [:], title: nil, text: presentationData.strings.Message_AudioTranscription_SubscribeToPremium, customUndoText: presentationData.strings.Message_AudioTranscription_SubscribeToPremiumAction, timeout: nil), elevatedLayout: false, position: .top, animateInAsReplacement: false, action: { action in
-                        if case .undo = action {
-                            let context = item.context
-                            var replaceImpl: ((ViewController) -> Void)?
-                            let controller = context.sharedContext.makePremiumDemoController(context: context, subject: .voiceToText, forceDark: false, action: {
-                                let controller = context.sharedContext.makePremiumIntroController(context: context, source: .settings, forceDark: false, dismissed: nil)
-                                replaceImpl?(controller)
-                            }, dismissed: nil)
-                            replaceImpl = { [weak controller] c in
-                                controller?.replace(with: c)
-                            }
-                            item.controllerInteraction.navigationController()?.pushViewController(controller, animated: true)
-                            
-                            let _ = ApplicationSpecificNotice.incrementAudioTranscriptionSuggestion(accountManager: item.context.sharedContext.accountManager).startStandalone()
-                        }
-                        return false })
-                    item.controllerInteraction.presentControllerInCurrent(tipController, nil)
-                    return
-                }
-            }
-        }
         
         var shouldBeginTranscription = false
         var shouldExpandNow = false
@@ -1881,19 +1827,48 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                 self.audioTranscriptionState = .inProgress
                 self.requestUpdateLayout(true)
                 
-                self.transcribeDisposable = (item.context.engine.messages.transcribeAudio(messageId: item.message.id)
+                let appLocale = presentationData.strings.baseLanguageCode
+                let signal: Signal<LocallyTranscribedAudio?, NoError> = item.context.engine.data.get(TelegramEngine.EngineData.Item.Messages.Message(id: item.message.id))
+                |> mapToSignal { message -> Signal<String?, NoError> in
+                    guard let message = message else {
+                        return .single(nil)
+                    }
+                    guard let file = message.media.first(where: { $0 is TelegramMediaFile }) as? TelegramMediaFile else {
+                        return .single(nil)
+                    }
+                    return item.context.engine.resources.data(id: EngineMediaResource.Id(file.resource.id))
+                    |> take(1)
+                    |> mapToSignal { data -> Signal<String?, NoError> in
+                        if !data.isComplete {
+                            return .single(nil)
+                        }
+                        return .single(data.path)
+                    }
+                }
+                |> mapToSignal { result -> Signal<LocallyTranscribedAudio?, NoError> in
+                    guard let result = result else {
+                        return .single(nil)
+                    }
+                    return transcribeAudio(path: result, appLocale: appLocale)
+                }
+                
+                self.transcribeDisposable = (signal
                 |> deliverOnMainQueue).startStrict(next: { [weak self] result in
+                    guard let strongSelf = self, let item = strongSelf.item else {
+                        return
+                    }
+                    if let result = result {
+                        let _ = item.context.engine.messages.storeLocallyTranscribedAudio(messageId: item.message.id, text: result.text, isFinal: result.isFinal, error: nil).startStandalone()
+                    } else {
+                        strongSelf.audioTranscriptionState = .collapsed
+                        strongSelf.requestUpdateLayout(true)
+                    }
+                }, completed: { [weak self] in
                     guard let strongSelf = self else {
                         return
                     }
                     strongSelf.transcribeDisposable?.dispose()
                     strongSelf.transcribeDisposable = nil
-                    
-                    if let item = strongSelf.item, !item.associatedData.isPremium && !item.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
-                        Queue.mainQueue().after(0.1, {
-                            let _ = strongSelf.presentAudioTranscriptionTooltip(finished: true)
-                        })
-                    }
                 })
             }
         }

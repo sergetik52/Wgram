@@ -324,29 +324,6 @@ func infoItems(
                     }))
                 }
                 
-                if WgramSettings.showPeerIdAndDc {
-                    let peerIdValue = user.id.id._internalGetInt64Value()
-                    var dcString = ""
-                    if let photo = user.profileImageRepresentations.first, let resource = photo.resource as? CloudFileMediaResource {
-                        let dcId = resource.datacenterId
-                        let dcName: String
-                        switch dcId {
-                        case 1, 3: dcName = "Майами"
-                        case 2, 4: dcName = "Амстердам"
-                        case 5: dcName = "Сингапур"
-                        default: dcName = "DC\(dcId)"
-                        }
-                        dcString = " • DC\(dcId) (\(dcName))"
-                    }
-                    let infoText = "\(peerIdValue)\(dcString)"
-                    items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: 999901, label: "ID & DC", text: infoText, textColor: .primary, action: { _, _ in
-                        UIPasteboard.general.string = "\(peerIdValue)"
-                        interaction.getController()?.present(UndoOverlayController(presentationData: presentationData, content: .copy(text: "ID скопирован в буфер"), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)
-                    }, requestLayout: { animated in
-                        interaction.requestLayout(animated)
-                    }))
-                }
-                
                 if let botInfo = user.botInfo, botInfo.flags.contains(.canEdit) {
                     items[currentPeerInfoSection]!.append(PeerInfoScreenCommentItem(id: ItemAppFooter, text: presentationData.strings.PeerInfo_AppFooterAdmin, linkAction: { action in
                         if case let .tap(url) = action {
@@ -390,6 +367,33 @@ func infoItems(
                         }
                     }
                 }
+            }
+            
+            if WgramSettings.showPeerIdAndDc {
+                let peerIdValue = user.id.id._internalGetInt64Value()
+                var regString = ""
+                if let regDate = WgramRegistrationDate.estimate(userId: peerIdValue) {
+                    regString = " • ~\(regDate)"
+                }
+                var dcString = ""
+                if let photo = user.profileImageRepresentations.first, let resource = photo.resource as? CloudFileMediaResource {
+                    let dcId = resource.datacenterId
+                    let dcName: String
+                    switch dcId {
+                    case 1, 3: dcName = "Майами"
+                    case 2, 4: dcName = "Амстердам"
+                    case 5: dcName = "Сингапур"
+                    default: dcName = "DC\(dcId)"
+                    }
+                    dcString = " • DC\(dcId) (\(dcName))"
+                }
+                let infoText = "\(peerIdValue)\(regString)\(dcString)"
+                items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: 999901, label: "ID профиля", text: infoText, textColor: .primary, action: { _, _ in
+                    UIPasteboard.general.string = "\(peerIdValue)"
+                    interaction.getController()?.present(UndoOverlayController(presentationData: presentationData, content: .copy(text: "ID скопирован в буфер"), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)
+                }, requestLayout: { animated in
+                    interaction.requestLayout(animated)
+                }))
             }
             
             if let businessHours = cachedData.businessHours {

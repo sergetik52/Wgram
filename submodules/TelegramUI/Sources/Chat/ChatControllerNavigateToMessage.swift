@@ -628,4 +628,28 @@ extension ChatControllerImpl {
             }
         }
     }
+    
+    func navigateToBeginning() {
+        self.loadingMessage.set(.single(.generic))
+        let peerId: EnginePeer.Id
+        let threadId: Int64?
+        switch self.chatLocation {
+        case let .peer(peerIdValue):
+            peerId = peerIdValue
+            threadId = nil
+        case let .replyThread(replyThreadMessage):
+            peerId = replyThreadMessage.peerId
+            threadId = replyThreadMessage.threadId
+        case .customChatContents:
+            self.loadingMessage.set(.single(nil))
+            return
+        }
+
+        self.messageIndexDisposable.set((self.context.engine.messages.searchMessageIdByTimestamp(peerId: peerId, threadId: threadId, timestamp: 1) |> deliverOnMainQueue).startStrict(next: { [weak self] messageId in
+            guard let self else { return }
+            self.loadingMessage.set(.single(nil))
+            let targetId = messageId ?? EngineMessage.Id(peerId: peerId, namespace: Namespaces.Message.Cloud, id: 1)
+            self.navigateToMessage(from: nil, to: .id(targetId, NavigateToMessageParams(timestamp: nil, quote: nil)), scrollPosition: .top(0.0), forceInCurrentChat: true)
+        }))
+    }
 }
