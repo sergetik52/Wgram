@@ -1,5 +1,7 @@
 import Foundation
+import UIKit
 import AVFoundation
+import UserNotifications
 import TelegramCore
 
 public final class WgramKeepAlive {
@@ -8,10 +10,42 @@ public final class WgramKeepAlive {
     
     private init() {
         NotificationCenter.default.addObserver(self, selector: #selector(self.updateState), name: NSNotification.Name("WgramUpdateKeepAlive"), object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.updateState), name: NSNotification.Name("WgramKeepAliveChanged"), object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.updateState), name: WgramSettings.didChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.handleInterruption(_:)), name: AVAudioSession.interruptionNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.handleAppStateChange), name: UIApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.handleAppStateChange), name: UIApplication.didEnterBackgroundNotification, object: nil)
+    }
+    
+    public func requestNotificationPermissionIfNeeded() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            if let error = error {
+                print("WgramKeepAlive: notification authorization error: \(error)")
+            }
+        }
+    }
+    
+    @objc public func handleAppStateChange() {
+        self.updateState()
+    }
+    
+    @objc private func handleInterruption(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+        if type == .ended {
+            if let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt {
+                let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+                if options.contains(.shouldResume) && WgramSettings.keepAliveInBackground {
+                    self.audioPlayer?.play()
+                }
+            }
+        }
     }
     
     @objc public func updateState() {
         if WgramSettings.keepAliveInBackground {
+            self.requestNotificationPermissionIfNeeded()
             self.start()
         } else {
             self.stop()
@@ -19,10 +53,16 @@ public final class WgramKeepAlive {
     }
     
     public func start() {
-        guard self.audioPlayer == nil else { return }
+        if let player = self.audioPlayer {
+            if !player.isPlaying {
+                player.play()
+            }
+            return
+        }
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
-            try AVAudioSession.sharedInstance().setActive(true)
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try session.setActive(true)
             
             let sampleRate: Double = 44100.0
             let duration: Double = 1.0
@@ -55,7 +95,7 @@ public final class WgramKeepAlive {
             
             let player = try AVAudioPlayer(data: audioData)
             player.numberOfLoops = -1
-            player.volume = 0.01
+            player.volume = 0.0001
             player.prepareToPlay()
             player.play()
             self.audioPlayer = player

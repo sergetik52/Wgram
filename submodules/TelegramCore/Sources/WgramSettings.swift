@@ -199,7 +199,7 @@ public struct WgramSettings {
 
     // MARK: - Keep Alive
     public static var keepAliveInBackground: Bool {
-        get { UserDefaults.standard.bool(forKey: keepAliveInBackgroundKey) }
+        get { UserDefaults.standard.object(forKey: keepAliveInBackgroundKey) as? Bool ?? true }
         set {
             UserDefaults.standard.set(newValue, forKey: keepAliveInBackgroundKey)
             notifyChanged()

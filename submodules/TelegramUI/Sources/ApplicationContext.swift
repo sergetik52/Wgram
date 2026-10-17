@@ -509,6 +509,17 @@ final class AuthorizedApplicationContext {
                             }
                         })
                     }
+                } else {
+                    if notify {
+                        let presentationData = strongSelf.context.sharedContext.currentPresentationData.with { $0 }
+                        WgramLocalNotifications.postNotification(
+                            context: strongSelf.context,
+                            messages: messages,
+                            threadData: threadData,
+                            strings: presentationData.strings,
+                            nameDisplayOrder: presentationData.nameDisplayOrder
+                        )
+                    }
                 }
             }
         }))
