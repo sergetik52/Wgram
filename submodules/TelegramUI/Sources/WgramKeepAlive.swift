@@ -4,17 +4,19 @@ import AVFoundation
 import UserNotifications
 import TelegramCore
 
-public final class WgramKeepAlive {
+public final class WgramKeepAlive: NSObject, AVAudioPlayerDelegate {
     public static let shared = WgramKeepAlive()
     private var audioPlayer: AVAudioPlayer?
+    private var backgroundTaskId: UIBackgroundTaskIdentifier = .invalid
     
-    private init() {
+    private override init() {
+        super.init()
         NotificationCenter.default.addObserver(self, selector: #selector(self.updateState), name: NSNotification.Name("WgramUpdateKeepAlive"), object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(self.updateState), name: NSNotification.Name("WgramKeepAliveChanged"), object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(self.updateState), name: WgramSettings.didChangeNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(self.handleInterruption(_:)), name: AVAudioSession.interruptionNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(self.handleAppStateChange), name: UIApplication.didBecomeActiveNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(self.handleAppStateChange), name: UIApplication.didEnterBackgroundNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.handleEnterForeground), name: UIApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.handleEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
     }
     
     public func requestNotificationPermissionIfNeeded() {
@@ -25,8 +27,26 @@ public final class WgramKeepAlive {
         }
     }
     
-    @objc public func handleAppStateChange() {
+    @objc public func handleEnterForeground() {
+        if self.backgroundTaskId != .invalid {
+            UIApplication.shared.endBackgroundTask(self.backgroundTaskId)
+            self.backgroundTaskId = .invalid
+        }
         self.updateState()
+    }
+    
+    @objc public func handleEnterBackground() {
+        if WgramSettings.keepAliveInBackground {
+            self.start()
+            if self.backgroundTaskId == .invalid {
+                self.backgroundTaskId = UIApplication.shared.beginBackgroundTask(withName: "WgramKeepAlive") { [weak self] in
+                    if let self = self, self.backgroundTaskId != .invalid {
+                        UIApplication.shared.endBackgroundTask(self.backgroundTaskId)
+                        self.backgroundTaskId = .invalid
+                    }
+                }
+            }
+        }
     }
     
     @objc private func handleInterruption(_ notification: Notification) {
@@ -94,6 +114,7 @@ public final class WgramKeepAlive {
             audioData.append(Data(count: Int(subChunk2Size)))
             
             let player = try AVAudioPlayer(data: audioData)
+            player.delegate = self
             player.numberOfLoops = -1
             player.volume = 0.0001
             player.prepareToPlay()
@@ -104,8 +125,18 @@ public final class WgramKeepAlive {
         }
     }
     
+    public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        if WgramSettings.keepAliveInBackground {
+            player.play()
+        }
+    }
+    
     public func stop() {
         self.audioPlayer?.stop()
         self.audioPlayer = nil
+        if self.backgroundTaskId != .invalid {
+            UIApplication.shared.endBackgroundTask(self.backgroundTaskId)
+            self.backgroundTaskId = .invalid
+        }
     }
 }

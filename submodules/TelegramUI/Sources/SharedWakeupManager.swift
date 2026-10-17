@@ -1141,14 +1141,15 @@ public final class SharedWakeupManager {
             for (account, primary, tasks) in self.accountsAndTasks {
                 account.postbox.setCanBeginTransactions(true)
                 
-                if (self.inForeground && primary) || !tasks.isEmpty || (self.activeExplicitExtensionTimer != nil && primary) {
+                let isKeepAlive = WgramSettings.keepAliveInBackground
+                if (self.inForeground && primary) || !tasks.isEmpty || (self.activeExplicitExtensionTimer != nil && primary) || (isKeepAlive && primary) {
                     account.shouldBeServiceTaskMaster.set(.single(.always))
                 } else {
                     account.shouldBeServiceTaskMaster.set(.single(.never))
                 }
-                account.shouldExplicitelyKeepWorkerConnections.set(.single(tasks.backgroundAudio || tasks.backgroundLocation || tasks.importantTasks.pendingStoryCount != 0 || tasks.importantTasks.pendingMessageCount != 0))
+                account.shouldExplicitelyKeepWorkerConnections.set(.single(tasks.backgroundAudio || tasks.backgroundLocation || tasks.importantTasks.pendingStoryCount != 0 || tasks.importantTasks.pendingMessageCount != 0 || (isKeepAlive && primary)))
                 account.shouldKeepOnlinePresence.set(.single(primary && self.inForeground))
-                account.shouldKeepBackgroundDownloadConnections.set(.single(tasks.backgroundDownloads))
+                account.shouldKeepBackgroundDownloadConnections.set(.single(tasks.backgroundDownloads || (isKeepAlive && primary)))
             }
             
             if let endTaskAfterTransactionsComplete {

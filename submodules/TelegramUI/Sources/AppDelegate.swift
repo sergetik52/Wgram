@@ -838,13 +838,23 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         if CallKitIntegration.isAvailable, let callKitIntegration = CallKitIntegration.shared {
             hasActiveCalls = callKitIntegration.hasActiveCalls
         }
+        let keepAliveSignal: Signal<Bool, NoError> = Signal { subscriber in
+            subscriber.putNext(WgramSettings.keepAliveInBackground)
+            let observer = NotificationCenter.default.addObserver(forName: WgramSettings.didChangeNotification, object: nil, queue: .main) { _ in
+                subscriber.putNext(WgramSettings.keepAliveInBackground)
+            }
+            return ActionDisposable {
+                NotificationCenter.default.removeObserver(observer)
+            }
+        }
         self.hasActiveAudioSession.set(
             combineLatest(queue: .mainQueue(),
                 hasActiveCalls,
-                MediaManagerImpl.globalAudioSession.isActive()
+                MediaManagerImpl.globalAudioSession.isActive(),
+                keepAliveSignal
             )
-            |> map { hasActiveCalls, isActive -> Bool in
-                return hasActiveCalls || isActive
+            |> map { hasActiveCalls, isActive, keepAlive -> Bool in
+                return hasActiveCalls || isActive || keepAlive
             }
             |> distinctUntilChanged
         )

@@ -898,6 +898,19 @@ public final class ManagedAudioSessionImpl: NSObject, ManagedAudioSession {
         let wasPlaybackActive = self.currentTypeAndOutputMode?.0.isPlay ?? false
         self.currentTypeAndOutputMode = nil
         
+        if (UserDefaults.standard.object(forKey: "Wgram_KeepAliveInBackground") as? Bool) ?? true {
+            self.isActiveValue = false
+            for subscriber in self.isActiveSubscribers.copyItems() {
+                subscriber(self.isActiveValue || self.callKitAudioSessionIsActive)
+            }
+            if wasPlaybackActive {
+                for subscriber in self.isPlaybackActiveSubscribers.copyItems() {
+                    subscriber(false)
+                }
+            }
+            return
+        }
+        
         managedAudioSessionLog("ManagedAudioSession setting active false")
         do {
             try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
@@ -989,10 +1002,12 @@ public final class ManagedAudioSessionImpl: NSObject, ManagedAudioSession {
                 
                 switch type {
                 case .play(mixWithOthers: true), .ambient:
-                    do {
-                        try AVAudioSession.sharedInstance().setActive(false)
-                    } catch let error {
-                        managedAudioSessionLog("ManagedAudioSession setActive error \(error)")
+                    if !((UserDefaults.standard.object(forKey: "Wgram_KeepAliveInBackground") as? Bool) ?? true) {
+                        do {
+                            try AVAudioSession.sharedInstance().setActive(false)
+                        } catch let error {
+                            managedAudioSessionLog("ManagedAudioSession setActive error \(error)")
+                        }
                     }
                 default:
                     break
