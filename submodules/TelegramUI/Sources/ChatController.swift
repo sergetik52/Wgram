@@ -7001,7 +7001,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             self.canReadHistory.get(),
             self.hasBrowserOrAppInFront.get()
         ) |> map { inForeground, globallyEnabled, hasBrowserOrWebAppInFront in
-            return inForeground && globallyEnabled && !hasBrowserOrWebAppInFront
+            return inForeground && globallyEnabled && !hasBrowserOrWebAppInFront && !WgramSettings.dontReadMessages
         } |> deliverOnMainQueue).startStrict(next: { [weak self] value in
             if let strongSelf = self, strongSelf.canReadHistoryValue != value {
                 strongSelf.canReadHistoryValue = value
@@ -9166,7 +9166,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 })
                 
                 if WgramSettings.markReadAfterAction {
-                    let _ = self.context.engine.messages.togglePeerUnreadMarkInteractively(peerId: peerId, threadId: 0, setToValue: false).startStandalone()
+                    self.context.engine.messages.forceMarkPeerAsRead(peerId: peerId)
                 }
                 
                 donateSendMessageIntent(account: self.context.account, sharedContext: self.context.sharedContext, intentContext: .chat, peerIds: [peerId])

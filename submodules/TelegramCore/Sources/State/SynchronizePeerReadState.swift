@@ -265,6 +265,9 @@ private func pushPeerReadState(network: Network, postbox: Postbox, stateManager:
         return inputSecretChat(postbox: postbox, peerId: peerId)
         |> mapToSignal { inputPeer -> Signal<PeerReadState, PeerReadStateValidationError> in
             // A rejected push must not be retried: the operation is only cleared once it
+            if WgramSettings.dontReadMessages {
+                return Signal<PeerReadState, PeerReadStateValidationError>.single(readState)
+            }
             return network.request(Api.functions.messages.readEncryptedHistory(peer: inputPeer, maxDate: maxIncomingReadIndex.timestamp))
             |> `catch` { _ -> Signal<Api.Bool, NoError> in
                 return .complete()
@@ -280,6 +283,9 @@ private func pushPeerReadState(network: Network, postbox: Postbox, stateManager:
         |> mapToSignal { inputPeer -> Signal<PeerReadState, PeerReadStateValidationError> in
             switch inputPeer {
             case let .inputPeerChannel(inputPeerChannelData):
+                if WgramSettings.dontReadMessages {
+                    return Signal<PeerReadState, PeerReadStateValidationError>.single(readState)
+                }
                 let (channelId, accessHash) = (inputPeerChannelData.channelId, inputPeerChannelData.accessHash)
                 switch readState {
                 case let .idBased(maxIncomingReadId, _, _, _, markedUnread):
@@ -311,6 +317,9 @@ private func pushPeerReadState(network: Network, postbox: Postbox, stateManager:
                     return .single(readState)
                 }
             default:
+                if WgramSettings.dontReadMessages {
+                    return Signal<PeerReadState, PeerReadStateValidationError>.single(readState)
+                }
                 switch readState {
                 case let .idBased(maxIncomingReadId, _, _, _, markedUnread):
                     var pushSignal: Signal<Void, NoError> = network.request(Api.functions.messages.readHistory(peer: inputPeer, maxId: maxIncomingReadId))

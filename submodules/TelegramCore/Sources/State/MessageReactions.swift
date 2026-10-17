@@ -28,7 +28,7 @@ public func updateMessageReactionsInteractively(account: Account, messageIds: [M
         }
         
         if WgramSettings.markReadAfterAction && !reactions.isEmpty {
-            _internal_togglePeerUnreadMarkInteractively(transaction: transaction, network: account.network, viewTracker: account.viewTracker, peerId: chatPeerId, setToValue: false)
+            _internal_forceMarkPeerAsRead(account: account, peerId: chatPeerId)
         }
         
         var messagesWithoutGroups: [Message] = []

@@ -950,6 +950,10 @@ public extension TelegramEngine {
             }
             |> ignoreValues
         }
+
+        public func forceMarkPeerAsRead(peerId: EnginePeer.Id) {
+            _internal_forceMarkPeerAsRead(account: self.account, peerId: peerId)
+        }
         
         public func togglePeerUnreadMarkInteractively(peerId: EnginePeer.Id, threadId: Int64, setToValue: Bool?) -> Signal<Never, NoError> {
             return self.account.postbox.transaction { transaction -> Void in

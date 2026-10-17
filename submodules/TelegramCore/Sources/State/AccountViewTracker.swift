@@ -964,9 +964,15 @@ public final class AccountViewTracker {
                                 let request: Signal<Bool, MTRpcError>
                                 switch inputPeer {
                                 case .inputPeerChat, .inputPeerSelf, .inputPeerUser:
+                                    if WgramSettings.dontReadMedia || WgramSettings.dontReadMessages {
+                                        return .complete()
+                                    }
                                     request = account.network.request(Api.functions.messages.readMessageContents(id: messageIds.map { $0.id }))
                                     |> map { _ in true }
                                 case let .inputPeerChannel(inputPeerChannelData):
+                                    if WgramSettings.dontReadMedia || WgramSettings.dontReadMessages {
+                                        return .complete()
+                                    }
                                     let (channelId, accessHash) = (inputPeerChannelData.channelId, inputPeerChannelData.accessHash)
                                     request = account.network.request(Api.functions.channels.readMessageContents(channel: .inputChannel(.init(channelId: channelId, accessHash: accessHash)), id: messageIds.map { $0.id }))
                                     |> map { _ in true }

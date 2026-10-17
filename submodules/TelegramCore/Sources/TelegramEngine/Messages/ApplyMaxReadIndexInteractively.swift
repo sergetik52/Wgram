@@ -367,3 +367,40 @@ func _internal_markAllChatsAsReadInteractively(transaction: Transaction, network
         _internal_togglePeerUnreadMarkInteractively(transaction: transaction, network: network, viewTracker: viewTracker, peerId: peerId, setToValue: false)
     }
 }
+
+public func _internal_forceMarkPeerAsRead(account: Account, peerId: PeerId) {
+    let _ = (account.postbox.transaction { transaction -> (Api.InputPeer?, Int32?) in
+        guard let peer = transaction.getPeer(peerId), let inputPeer = apiInputPeer(peer) else {
+            return (nil, nil)
+        }
+        var topId: Int32?
+        if let topIndex = transaction.getTopPeerMessageIndex(peerId: peerId) {
+            topId = topIndex.id.id
+            let _ = transaction.applyInteractiveReadMaxIndex(topIndex)
+        } else {
+            transaction.applyMarkUnread(peerId: peerId, namespace: Namespaces.Message.Cloud, value: false, interactive: true)
+        }
+        account.viewTracker.updateMarkAllMentionsSeen(peerId: peerId, threadId: nil)
+        account.viewTracker.updateMarkAllReactionsAndPollVotesSeen(peerId: peerId, threadId: nil)
+        return (inputPeer, topId)
+    }
+    |> mapToSignal { (inputPeer, topId) -> Signal<Void, NoError> in
+        guard let inputPeer = inputPeer, let topId = topId else {
+            return .complete()
+        }
+        let request: Signal<Void, NoError>
+        switch inputPeer {
+        case let .inputPeerChannel(inputPeerChannelData):
+            let (channelId, accessHash) = (inputPeerChannelData.channelId, inputPeerChannelData.accessHash)
+            request = account.network.request(Api.functions.channels.readHistory(channel: .inputChannel(.init(channelId: channelId, accessHash: accessHash)), maxId: topId))
+            |> `catch` { _ -> Signal<Api.Bool, NoError> in return .single(.boolFalse) }
+            |> mapToSignal { _ -> Signal<Void, NoError> in return .complete() }
+        default:
+            request = account.network.request(Api.functions.messages.readHistory(peer: inputPeer, maxId: topId))
+            |> map(Optional.init)
+            |> `catch` { _ -> Signal<Api.messages.AffectedMessages?, NoError> in return .single(nil) }
+            |> mapToSignal { _ -> Signal<Void, NoError> in return .complete() }
+        }
+        return request
+    }).startStandalone()
+}

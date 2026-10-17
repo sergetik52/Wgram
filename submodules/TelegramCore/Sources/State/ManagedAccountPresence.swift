@@ -57,19 +57,18 @@ private final class AccountPresenceManagerImpl {
         let request: Signal<Api.Bool, MTRpcError>
         if isOnline {
             self.onlineTimer?.invalidate()
-            let timeout: Double = WgramSettings.dontUpdateOnline ? 5.0 : 25.0
-            let timer = SignalKitTimer(timeout: timeout, repeat: false, completion: { [weak self] in
-                guard let strongSelf = self else {
-                    return
-                }
-                strongSelf.updatePresence(true)
-            }, queue: self.queue)
-            self.onlineTimer = timer
-            timer.start()
-
             if WgramSettings.dontUpdateOnline {
+                self.onlineTimer = nil
                 request = self.network.request(Api.functions.account.updateStatus(offline: .boolTrue))
             } else {
+                let timer = SignalKitTimer(timeout: 25.0, repeat: false, completion: { [weak self] in
+                    guard let strongSelf = self else {
+                        return
+                    }
+                    strongSelf.updatePresence(true)
+                }, queue: self.queue)
+                self.onlineTimer = timer
+                timer.start()
                 request = self.network.request(Api.functions.account.updateStatus(offline: .boolFalse))
             }
         } else {

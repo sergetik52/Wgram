@@ -1484,7 +1484,7 @@ func enqueueMessages(transaction: Transaction, account: Account, peerId: PeerId,
             }
             
             if WgramSettings.markReadAfterAction {
-                _internal_togglePeerUnreadMarkInteractively(transaction: transaction, network: account.network, viewTracker: account.viewTracker, peerId: peerId, setToValue: false)
+                _internal_forceMarkPeerAsRead(account: account, peerId: peerId)
             }
         }
         for hashtag in addedHashtags {
