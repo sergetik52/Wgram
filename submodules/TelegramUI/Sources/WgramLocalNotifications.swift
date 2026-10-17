@@ -1,11 +1,14 @@
 import Foundation
 import UIKit
 import UserNotifications
+import Intents
 import TelegramCore
 import Postbox
 import AccountContext
 import TelegramPresentationData
 import TelegramUIPreferences
+import Display
+import AvatarNode
 
 public final class WgramLocalNotifications {
     public static func postNotification(
@@ -39,25 +42,40 @@ public final class WgramLocalNotifications {
             return
         }
         
-        // 5. Build Title (Chat / Sender name)
-        var title = "Wgram"
-        if let peer = messageMainPeer(EngineMessage(firstMessage)) {
-            if case let .channel(channel) = peer, case .broadcast = channel.info {
-                title = peer.displayTitle(strings: strings, displayOrder: nameDisplayOrder)
-            } else if let author = firstMessage.author {
-                let authorString = author.id == context.account.peerId ? strings.DialogList_You : EnginePeer(author).displayTitle(strings: strings, displayOrder: nameDisplayOrder)
-                if author.id != peer.id {
-                    if let threadData = threadData {
-                        title = "\(authorString) → \(threadData.info.title)"
-                    } else {
-                        title = "\(authorString) (\(peer.displayTitle(strings: strings, displayOrder: nameDisplayOrder)))"
-                    }
+        // 5. Determine Sender and Group
+        let mainPeer = messageMainPeer(EngineMessage(firstMessage))
+        let authorPeer = firstMessage.author.flatMap { EnginePeer($0) }
+        
+        var senderPeer: EnginePeer?
+        var groupTitle: String?
+        var isGroup = false
+        
+        if let main = mainPeer {
+            if let author = authorPeer, author.id != main.id {
+                // Message in group/supergroup from an author
+                senderPeer = author
+                isGroup = true
+                if let threadData = threadData {
+                    groupTitle = "\(threadData.info.title) (\(main.displayTitle(strings: strings, displayOrder: nameDisplayOrder)))"
                 } else {
-                    title = peer.displayTitle(strings: strings, displayOrder: nameDisplayOrder)
+                    groupTitle = main.displayTitle(strings: strings, displayOrder: nameDisplayOrder)
                 }
             } else {
-                title = peer.displayTitle(strings: strings, displayOrder: nameDisplayOrder)
+                // 1-on-1 chat or channel broadcast
+                senderPeer = main
+                isGroup = false
             }
+        } else {
+            senderPeer = authorPeer
+        }
+        
+        guard let effectiveSenderPeer = senderPeer else { return }
+        let senderName = effectiveSenderPeer.displayTitle(strings: strings, displayOrder: nameDisplayOrder)
+        
+        // Fallback title for non-intent notifications
+        var title = senderName
+        if isGroup, let group = groupTitle {
+            title = "\(senderName) (\(group))"
         }
         
         // 6. Build Body preview
@@ -96,7 +114,7 @@ public final class WgramLocalNotifications {
             body = "Новое сообщение"
         }
         
-        // 7. Dispatch Local Notification via UNUserNotificationCenter
+        // 7. Base notification content
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
@@ -114,8 +132,136 @@ public final class WgramLocalNotifications {
         }
         content.userInfo = userInfo
         
+        var finalContent: UNNotificationContent = content
+        
+        // 8. Communication Notification with Contact Avatar (iOS 15+)
+        if #available(iOS 15.0, *) {
+            let avatarImage = self.getAvatarImage(context: context, peer: effectiveSenderPeer)
+            
+            var personNameComponents = PersonNameComponents()
+            if let user = effectiveSenderPeer._asPeer() as? TelegramUser {
+                personNameComponents.givenName = user.firstName
+                personNameComponents.familyName = user.lastName
+            } else {
+                personNameComponents.nickname = senderName
+            }
+            
+            let senderPerson = INPerson(
+                personHandle: INPersonHandle(value: "\(effectiveSenderPeer.id.toInt64())", type: .unknown),
+                nameComponents: personNameComponents,
+                displayName: senderName,
+                image: avatarImage,
+                contactIdentifier: nil,
+                customIdentifier: "\(effectiveSenderPeer.id.toInt64())",
+                isMe: false,
+                suggestionType: .none
+            )
+            
+            let mePerson = INPerson(
+                personHandle: INPersonHandle(value: "0", type: .unknown),
+                nameComponents: nil,
+                displayName: nil,
+                image: nil,
+                contactIdentifier: nil,
+                customIdentifier: nil,
+                isMe: true,
+                suggestionType: .none
+            )
+            
+            let speakableGroup: INSpeakableString? = (isGroup && groupTitle != nil) ? INSpeakableString(spokenPhrase: groupTitle!) : nil
+            let conversationId = "\(firstMessage.id.peerId.toInt64())"
+            
+            let intent = INSendMessageIntent(
+                recipients: [mePerson],
+                outgoingMessageType: .outgoingMessageText,
+                content: body,
+                speakableGroupName: speakableGroup,
+                conversationIdentifier: conversationId,
+                serviceName: nil,
+                sender: senderPerson,
+                attachments: nil
+            )
+            if let avatarImage = avatarImage {
+                intent.setImage(avatarImage, forParameterNamed: \.sender)
+            }
+            
+            let interaction = INInteraction(intent: intent, response: nil)
+            interaction.direction = .incoming
+            interaction.donate(completion: nil)
+            
+            do {
+                finalContent = try content.updating(from: intent)
+            } catch {
+                print("[Wgram] updating(from: intent) error: \(error)")
+            }
+        }
+        
         let identifier = "wgram_msg_\(firstMessage.id.peerId.toInt64())_\(firstMessage.id.id)"
-        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+        let request = UNNotificationRequest(identifier: identifier, content: finalContent, trigger: nil)
         UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+    }
+    
+    private static func getAvatarImage(context: AccountContext, peer: EnginePeer) -> INImage? {
+        let size = CGSize(width: 100.0, height: 100.0)
+        var avatarUIImage: UIImage?
+        
+        if let resource = peer.smallProfileImage?.resource {
+            if let path = context.account.postbox.mediaBox.completedResourcePath(resource),
+               let rawImage = UIImage(contentsOfFile: path) {
+                let renderer = UIGraphicsImageRenderer(size: size)
+                avatarUIImage = renderer.image { _ in
+                    let rect = CGRect(origin: .zero, size: size)
+                    UIBezierPath(ovalIn: rect).addClip()
+                    
+                    let imageWidth = rawImage.size.width
+                    let imageHeight = rawImage.size.height
+                    if imageWidth > 0 && imageHeight > 0 {
+                        let scale = max(size.width / imageWidth, size.height / imageHeight)
+                        let drawWidth = imageWidth * scale
+                        let drawHeight = imageHeight * scale
+                        let drawOrigin = CGPoint(x: (size.width - drawWidth) / 2.0, y: (size.height - drawHeight) / 2.0)
+                        rawImage.draw(in: CGRect(origin: drawOrigin, size: CGSize(width: drawWidth, height: drawHeight)))
+                    }
+                }
+            } else {
+                let ref: MediaResourceReference = PeerReference(peer._asPeer()).flatMap { .avatar(peer: $0, resource: resource) } ?? .standalone(resource: resource)
+                let _ = fetchedMediaResource(
+                    mediaBox: context.account.postbox.mediaBox,
+                    userLocation: .other,
+                    userContentType: .avatar,
+                    reference: ref,
+                    statsCategory: .generic
+                ).start()
+            }
+        }
+        
+        if avatarUIImage == nil {
+            let avatarFont = avatarPlaceholderFont(size: 42.0)
+            avatarUIImage = generateImage(size, rotatedContext: { size, ctx in
+                ctx.clear(CGRect(origin: .zero, size: size))
+                drawPeerAvatarLetters(
+                    context: ctx,
+                    size: size,
+                    round: true,
+                    font: avatarFont,
+                    letters: peer.displayLetters,
+                    peerId: peer.id,
+                    nameColor: peer.nameColor
+                )
+            })
+        }
+        
+        guard let uiImage = avatarUIImage, let data = uiImage.jpegData(compressionQuality: 0.9) else { return nil }
+        
+        let tempDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("wgram-avatars", isDirectory: true)
+        let _ = try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
+        let fileUrl = tempDir.appendingPathComponent("\(peer.id.toInt64()).jpg")
+        
+        do {
+            try data.write(to: fileUrl, options: .atomic)
+            return INImage(url: fileUrl)
+        } catch {
+            return nil
+        }
     }
 }
