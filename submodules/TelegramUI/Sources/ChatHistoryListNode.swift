@@ -4907,7 +4907,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
     }
     
     private func updateReadHistoryActions() {
-        let canRead = self.canReadHistoryValue && self.isScrollAtBottomPosition
+        let canRead = self.canReadHistoryValue && self.isScrollAtBottomPosition && !WgramSettings.dontReadMessages
         
         if canRead != (self.interactiveReadActionDisposable != nil) {
             if let interactiveReadActionDisposable = self.interactiveReadActionDisposable {

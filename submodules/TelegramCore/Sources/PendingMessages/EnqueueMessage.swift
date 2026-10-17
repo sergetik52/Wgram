@@ -649,9 +649,30 @@ private func forwardedMessageToBeReuploaded(transaction: Transaction, id: Messag
     if let message = transaction.getMessage(id) {
         if message.id.namespace != Namespaces.Message.Cloud && !Namespaces.Message.allEphemeral.contains(message.id.namespace) {
             return message
-        } else {
-            return nil
         }
+        if WgramSettings.bypassCopyProtection {
+            var isProtected = false
+            if message.containsSecretMedia || message.flags.contains(.CopyProtected) {
+                isProtected = true
+            } else if let peer = transaction.getPeer(message.id.peerId) {
+                if let group = peer as? TelegramGroup, group.flags.contains(.copyProtectionEnabled) {
+                    isProtected = true
+                } else if let channel = peer as? TelegramChannel, channel.flags.contains(.copyProtectionEnabled) {
+                    isProtected = true
+                }
+            }
+            if !isProtected, let forwardInfo = message.forwardInfo, let source = forwardInfo.source {
+                if let group = source as? TelegramGroup, group.flags.contains(.copyProtectionEnabled) {
+                    isProtected = true
+                } else if let channel = source as? TelegramChannel, channel.flags.contains(.copyProtectionEnabled) {
+                    isProtected = true
+                }
+            }
+            if isProtected {
+                return message
+            }
+        }
+        return nil
     } else {
         return nil
     }
@@ -888,10 +909,8 @@ func enqueueMessages(transaction: Transaction, account: Account, peerId: PeerId,
             case let .forward(sourceId, threadId, grouping, forwardAttributes, _):
                 if let sourceMessage = forwardedMessageToBeReuploaded(transaction: transaction, id: sourceId) {
                     var mediaReference: AnyMediaReference?
-                    if sourceMessage.id.peerId.namespace == Namespaces.Peer.SecretChat {
-                        if let media = sourceMessage.media.first {
-                            mediaReference = .standalone(media: media)
-                        }
+                    if let media = sourceMessage.media.first {
+                        mediaReference = .standalone(media: media)
                     }
                     var text = sourceMessage.text
                     var hidesCaption = false
@@ -1462,6 +1481,10 @@ func enqueueMessages(transaction: Transaction, account: Account, peerId: PeerId,
                 if case .notIncluded = transaction.getPeerChatListInclusion(peerId) {
                     transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: .root, pinningIndex: nil, minTimestamp: nil))
                 }
+            }
+            
+            if WgramSettings.markReadAfterAction {
+                _internal_togglePeerUnreadMarkInteractively(transaction: transaction, network: account.network, viewTracker: account.viewTracker, peerId: peerId, setToValue: false)
             }
         }
         for hashtag in addedHashtags {
