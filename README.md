@@ -1,5 +1,10 @@
 <div align="center">
 
+<img src=".github/assets/wgram_banner.png" alt="Wgram Banner" width="100%" style="border-radius: 12px; max-width: 960px;" />
+
+<br/>
+<br/>
+
 # ⚡ Wgram for iOS
 
 **Продвинутый, приватный и бескомпромиссный форк Telegram для iOS**
