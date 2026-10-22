@@ -181,12 +181,12 @@ extension ChatControllerImpl {
                     viewOnceAvailable: viewOnceAvailable,
                     inputPanelFrame: (currentInputPanelFrame, self.chatDisplayNode.inputNode != nil),
                     chatNode: self.chatDisplayNode.historyNode,
-                    completion: { [weak self] message, silentPosting, scheduleTime, repeatPeriod in
+                    completion: { [weak self] messages, silentPosting, scheduleTime, repeatPeriod in
                         guard let self, let videoController = self.videoRecorderValue else {
                             return
                         }
                         
-                        guard var message else {
+                        guard let messages = messages, !messages.isEmpty else {
                             self.recorderFeedback?.error()
                             self.recorderFeedback = nil
                             self.videoRecorder.set(.single(nil))
@@ -194,10 +194,18 @@ extension ChatControllerImpl {
                         }
                         
                         let replyMessageSubject = self.presentationInterfaceState.interfaceState.replyMessageSubject
-                        let correlationId = Int64.random(in: 0 ..< Int64.max)
-                        message = message
-                            .withUpdatedReplyToMessageId(replyMessageSubject?.subjectModel)
-                            .withUpdatedCorrelationId(correlationId)
+                        var processedMessages: [EnqueueMessage] = []
+                        var firstCorrelationId: Int64?
+                        
+                        for (index, var msg) in messages.enumerated() {
+                            let correlationId = Int64.random(in: 0 ..< Int64.max)
+                            if index == 0 {
+                                firstCorrelationId = correlationId
+                                msg = msg.withUpdatedReplyToMessageId(replyMessageSubject?.subjectModel)
+                            }
+                            msg = msg.withUpdatedCorrelationId(correlationId)
+                            processedMessages.append(msg)
+                        }
                         
                         var shouldAnimateMessageTransition = self.chatDisplayNode.shouldAnimateMessageTransition
                         if self.chatLocation.threadId == nil, let channel = self.presentationInterfaceState.renderedPeer?.peer as? TelegramChannel, channel.isMonoForum, let linkedMonoforumId = channel.linkedMonoforumId, let mainChannel = self.presentationInterfaceState.renderedPeer?.peers[linkedMonoforumId] as? TelegramChannel, mainChannel.hasPermission(.manageDirect) {
@@ -205,7 +213,7 @@ extension ChatControllerImpl {
                         }
                         
                         var usedCorrelationId = false
-                        if scheduleTime == nil, shouldAnimateMessageTransition, let extractedView = videoController.extractVideoSnapshot() {
+                        if let correlationId = firstCorrelationId, scheduleTime == nil, shouldAnimateMessageTransition, let extractedView = videoController.extractVideoSnapshot() {
                             usedCorrelationId = true
                             self.chatDisplayNode.messageTransitionNode.add(correlationId: correlationId, source:  .videoMessage(ChatMessageTransitionNodeImpl.Source.VideoMessage(view: extractedView)), initiated: { [weak videoController, weak self] in
                                 videoController?.hideVideoSnapshot()
@@ -226,11 +234,10 @@ extension ChatControllerImpl {
                                     $0.updatedInterfaceState { $0.withUpdatedReplyMessageSubject(nil).withUpdatedSendMessageEffect(nil).withUpdatedMediaDraftState(nil).withUpdatedPostSuggestionState(nil) }
                                 })
                             }
-                        }, usedCorrelationId ? correlationId : nil)
+                        }, usedCorrelationId ? firstCorrelationId : nil)
                         
-                        let messages = [message]
                         let effectiveSilentPosting = silentPosting ?? self.presentationInterfaceState.interfaceState.silentPosting
-                        let transformedMessages = self.transformEnqueueMessages(messages, silentPosting: effectiveSilentPosting, scheduleTime: scheduleTime, repeatPeriod: repeatPeriod)
+                        let transformedMessages = self.transformEnqueueMessages(processedMessages, silentPosting: effectiveSilentPosting, scheduleTime: scheduleTime, repeatPeriod: repeatPeriod)
                         
                         self.sendMessages(transformedMessages)
                     }

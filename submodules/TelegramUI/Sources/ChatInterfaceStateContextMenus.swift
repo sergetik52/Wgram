@@ -1201,6 +1201,19 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             })))
         }
         
+        if WgramSettings.ghostModeEnabled && WgramSettings.dontReadMessages, !isPinnedMessages {
+            let targetMessage = messages[0]
+            if !targetMessage.id.peerId.isTelegramNotifications && (targetMessage.id.namespace == Namespaces.Message.Cloud || targetMessage.id.namespace == Namespaces.Message.SecretIncoming || targetMessage.id.namespace == Namespaces.Message.Local) {
+                actions.append(.action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.ChatList_Context_MarkAsRead, icon: { theme in
+                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/MarkAsRead"), color: theme.actionSheet.primaryTextColor)
+                }, action: { c, _ in
+                    c?.dismiss(completion: {
+                        context.engine.messages.forceMarkMessageAsRead(messageId: targetMessage.id)
+                    })
+                })))
+            }
+        }
+        
         if data.messageActions.options.contains(.sendGift), !message.id.peerId.isTelegramNotifications {
             let sendGiftTitle: String
             var isIncoming = message.effectivelyIncoming(context.account.peerId)

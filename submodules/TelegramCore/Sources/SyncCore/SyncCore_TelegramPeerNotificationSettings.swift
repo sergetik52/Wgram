@@ -1,7 +1,7 @@
 import Foundation
 import Postbox
 
-private let cloudSoundMapping: [Int32: Int64] = [
+public let cloudSoundMapping: [Int32: Int64] = [
     2: 5078299559046677200,
     3: 5078299559046677201,
     4: 5078299559046677202,

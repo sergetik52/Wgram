@@ -189,7 +189,11 @@ public struct MessageTextEntity: PostboxCoding, Codable, Equatable {
             self.type = .Pre(language: try? container.decodeIfPresent(String.self, forKey: "language"))
         case 10:
             let url = (try? container.decode(String.self, forKey: "url")) ?? ""
-            self.type = .TextUrl(url: url)
+            if WgramSettings.localPremiumCustomEmoji, let fileId = WgramSettings.parseCustomEmojiUrl(url) {
+                self.type = .CustomEmoji(stickerPack: nil, fileId: fileId)
+            } else {
+                self.type = .TextUrl(url: url)
+            }
         case 11:
             let peerId = (try? container.decode(Int64.self, forKey: "peerId")) ?? 0
             self.type = .TextMention(peerId: PeerId(peerId))
@@ -403,11 +407,40 @@ public class TextEntitiesMessageAttribute: MessageAttribute, Equatable {
     }
     
     public init(entities: [MessageTextEntity]) {
-        self.entities = entities
+        if WgramSettings.localPremiumCustomEmoji {
+            var converted: [MessageTextEntity] = []
+            var changed = false
+            for entity in entities {
+                if case let .TextUrl(url) = entity.type, let fileId = WgramSettings.parseCustomEmojiUrl(url) {
+                    converted.append(MessageTextEntity(range: entity.range, type: .CustomEmoji(stickerPack: nil, fileId: fileId)))
+                    changed = true
+                } else {
+                    converted.append(entity)
+                }
+            }
+            self.entities = changed ? converted : entities
+        } else {
+            self.entities = entities
+        }
     }
     
     required public init(decoder: PostboxDecoder) {
-        self.entities = decoder.decodeObjectArrayWithDecoderForKey("entities")
+        let entities: [MessageTextEntity] = decoder.decodeObjectArrayWithDecoderForKey("entities")
+        if WgramSettings.localPremiumCustomEmoji {
+            var converted: [MessageTextEntity] = []
+            var changed = false
+            for entity in entities {
+                if case let .TextUrl(url) = entity.type, let fileId = WgramSettings.parseCustomEmojiUrl(url) {
+                    converted.append(MessageTextEntity(range: entity.range, type: .CustomEmoji(stickerPack: nil, fileId: fileId)))
+                    changed = true
+                } else {
+                    converted.append(entity)
+                }
+            }
+            self.entities = changed ? converted : entities
+        } else {
+            self.entities = entities
+        }
     }
     
     public func encode(_ encoder: PostboxEncoder) {

@@ -349,8 +349,16 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         NSLog(">>> WGRAM: application didFinishLaunchingWithOptions started")
         WgramKeepAlive.shared.updateState()
-        precondition(!testIsLaunched)
         testIsLaunched = true
+        
+        if #available(iOS 10.3, *) {
+            if !UserDefaults.standard.bool(forKey: "Wgram_AppliedDefaultIcon_v1") {
+                UserDefaults.standard.set(true, forKey: "Wgram_AppliedDefaultIcon_v1")
+                if application.alternateIconName != nil {
+                    application.setAlternateIconName(nil, completionHandler: { _ in })
+                }
+            }
+        }
         
         let _ = voipTokenPromise.get().start(next: { token in
             self.voipDeviceToken.set(.single(token))
@@ -1014,7 +1022,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         }, getAvailableAlternateIcons: {
             if #available(iOS 10.3, *) {
                 var icons = [
-                    PresentationAppIcon(name: "BlueIcon", imageName: "BlueIcon", isDefault: buildConfig.isAppStoreBuild),
+                    PresentationAppIcon(name: "WgramIcon", imageName: "WgramIcon", isDefault: true),
+                    PresentationAppIcon(name: "BlueIcon", imageName: "BlueIcon", isDefault: false),
                     PresentationAppIcon(name: "New2", imageName: "New2"),
                     PresentationAppIcon(name: "New1", imageName: "New1"),
                     PresentationAppIcon(name: "BlackIcon", imageName: "BlackIcon"),
@@ -3047,7 +3056,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                             messageId = messageIdFromNotification(peerId: peerId, notification: response.notification)
                         }
                         let storyId = storyIdFromNotification(peerId: peerId, notification: response.notification)
-                        self.openChatWhenReady(accountId: accountId, peerId: peerId, threadId: threadId, messageId: messageId, storyId: storyId)
+                        self.openChatWhenReady(accountId: accountId, peerId: peerId, threadId: threadId, messageId: messageId, storyId: storyId, alwaysKeepMessageId: true)
                     }
                 }
                 completionHandler()
@@ -3415,7 +3424,10 @@ private func accountIdFromNotification(_ notification: UNNotification, sharedCon
 
 @available(iOS 10.0, *)
 private func peerIdFromNotification(_ notification: UNNotification) -> (peerId: PeerId, threadId: Int64?)? {
-    let threadId = notification.request.content.userInfo["threadId"] as? Int64
+    var threadId = notification.request.content.userInfo["threadId"] as? Int64
+    if notification.request.content.categoryIdentifier == "c" {
+        threadId = nil
+    }
     
     if let peerId = notification.request.content.userInfo["peerId"] as? Int64 {
         return (PeerId(peerId), threadId)

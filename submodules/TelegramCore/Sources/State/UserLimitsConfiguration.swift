@@ -35,9 +35,9 @@ public struct UserLimitsConfiguration: Equatable {
     
     public static var defaultValue: UserLimitsConfiguration {
         return UserLimitsConfiguration(
-            maxPinnedChatCount: 5,
-            maxPinnedSavedChatCount: 5,
-            maxArchivedPinnedChatCount: 100,
+            maxPinnedChatCount: 1000,
+            maxPinnedSavedChatCount: 1000,
+            maxArchivedPinnedChatCount: 1000,
             maxChannelsCount: 500,
             maxPublicLinksCount: 10,
             maxSavedGifCount: 200,
@@ -157,15 +157,15 @@ extension UserLimitsConfiguration {
             }
         }
         
-        self.maxPinnedChatCount = getValue("dialogs_pinned_limit", orElse: defaultValue.maxPinnedChatCount)
-        self.maxPinnedSavedChatCount = getValue("saved_dialogs_pinned_limit", orElse: defaultValue.maxPinnedSavedChatCount)
-        self.maxArchivedPinnedChatCount = getValue("dialogs_folder_pinned_limit", orElse: defaultValue.maxArchivedPinnedChatCount)
+        self.maxPinnedChatCount = 1000
+        self.maxPinnedSavedChatCount = 1000
+        self.maxArchivedPinnedChatCount = 1000
         self.maxChannelsCount = getValue("channels_limit", orElse: defaultValue.maxChannelsCount)
         self.maxPublicLinksCount = getValue("channels_public_limit", orElse: defaultValue.maxPublicLinksCount)
         self.maxSavedGifCount = getValue("saved_gifs_limit", orElse: defaultValue.maxSavedGifCount)
         self.maxFavedStickerCount = getValue("stickers_faved_limit", orElse: defaultValue.maxFavedStickerCount)
         self.maxFoldersCount = getValue("dialog_filters_limit", orElse: defaultValue.maxFoldersCount)
-        self.maxFolderChatsCount = getValue("dialog_filters_chats_limit", orElse: defaultValue.maxFolderChatsCount)
+        self.maxFolderChatsCount = max(1000, getValue("dialog_filters_chats_limit", orElse: defaultValue.maxFolderChatsCount))
         self.maxCaptionLength = getValue("caption_length_limit", orElse: defaultValue.maxCaptionLength)
         self.maxUploadFileParts = getValue("upload_max_fileparts", orElse: defaultValue.maxUploadFileParts)
         self.maxAboutLength = getValue("about_length_limit", orElse: defaultValue.maxAboutLength)

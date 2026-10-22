@@ -80,3 +80,4 @@ xcode-files
 **/node_modules/
 tools/sim-watcher/dist/
 .mcp.json
+video_gen/

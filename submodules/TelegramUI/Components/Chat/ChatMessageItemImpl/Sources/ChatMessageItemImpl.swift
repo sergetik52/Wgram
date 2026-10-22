@@ -397,6 +397,14 @@ public final class ChatMessageItemImpl: ChatMessageItem, CustomStringConvertible
                 completion(node, {
                     return (nil, { info in
                         apply(.None, info, synchronousLoads)
+                        var isDeleted = false
+                        for (message, _) in self.content {
+                            if message.isDeletedByRemote {
+                                isDeleted = true
+                                break
+                            }
+                        }
+                        node.alpha = isDeleted ? 0.7 : 1.0
                     })
                 })
             }
@@ -496,6 +504,15 @@ public final class ChatMessageItemImpl: ChatMessageItem, CustomStringConvertible
                                 nodeValue.safeInsets = UIEdgeInsets(top: 0.0, left: params.leftInset, bottom: 0.0, right: params.rightInset)
                                 nodeValue.updateSelectionState(animated: false)
                                 nodeValue.updateHighlightedState(animated: false)
+                                
+                                var isDeleted = false
+                                for (message, _) in self.content {
+                                    if message.isDeletedByRemote {
+                                        isDeleted = true
+                                        break
+                                    }
+                                }
+                                animation.transition.updateAlpha(node: nodeValue, alpha: isDeleted ? 0.7 : 1.0)
                             }
                         })
                     }

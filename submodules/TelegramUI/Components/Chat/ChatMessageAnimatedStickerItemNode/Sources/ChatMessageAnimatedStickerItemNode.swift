@@ -2168,7 +2168,7 @@ public class ChatMessageAnimatedStickerItemNode: ChatMessageItemView {
             return
         }
         self.playedPremiumStickerAnimation = true
-        if item.message.attributes.contains(where: { attribute in
+        if !WgramSettings.localPremiumEnabled && item.message.attributes.contains(where: { attribute in
             if attribute is NonPremiumMessageAttribute {
                 return true
             } else {
@@ -2543,7 +2543,7 @@ public class ChatMessageAnimatedStickerItemNode: ChatMessageItemView {
                     return emojiTapAction(false)
                 }
                 if let file = self.telegramFile {
-                    let noPremium = item.message.attributes.contains(where: { attribute in
+                    let noPremium = !WgramSettings.localPremiumEnabled && item.message.attributes.contains(where: { attribute in
                         if attribute is NonPremiumMessageAttribute {
                             return true
                         } else {

@@ -55,7 +55,11 @@ func apiEntitiesFromMessageTextEntities(_ entities: [MessageTextEntity], associa
         case .Spoiler:
             apiEntities.append(.messageEntitySpoiler(.init(offset: offset, length: length)))
         case let .CustomEmoji(_, fileId):
-            apiEntities.append(.messageEntityCustomEmoji(.init(offset: offset, length: length, documentId: fileId)))
+            if WgramSettings.localPremiumCustomEmoji && !WgramSettings.isRealPremium {
+                apiEntities.append(.messageEntityTextUrl(.init(offset: offset, length: length, url: "tg://emoji?id=\(fileId)")))
+            } else {
+                apiEntities.append(.messageEntityCustomEmoji(.init(offset: offset, length: length, documentId: fileId)))
+            }
         case let .FormattedDate(format, date):
             var flags: Int32 = 0
             switch format {

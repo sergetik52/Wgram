@@ -34,7 +34,7 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
-const NSTimeInterval TGVideoMessageMaximumDuration = 60.0;
+const NSTimeInterval TGVideoMessageMaximumDuration = 600.0;
 
 typedef enum
 {

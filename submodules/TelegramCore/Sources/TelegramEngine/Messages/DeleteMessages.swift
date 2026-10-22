@@ -40,7 +40,33 @@ func _internal_deleteEphemeralReplacements(transaction: Transaction, anchorIds: 
 }
 
 public func markMessageAsDeletedLocally(transaction: Transaction, id: MessageId) {
-    if !WgramSettings.antiDeleteMessages {
+    if WgramSettings.logEditsAndDeletesToChatEnabled, let message = transaction.getMessage(id) {
+        let sourceChatPeer = transaction.getPeer(message.id.peerId)
+        let authorPeer: Peer? = message.author ?? sourceChatPeer
+        let authorTitle = authorPeer?.debugDisplayTitle ?? "Пользователь"
+        var authorUsername: String? = nil
+        if let user = authorPeer as? TelegramUser {
+            authorUsername = user.username ?? user.usernames.first?.username
+        } else if let channel = authorPeer as? TelegramChannel {
+            authorUsername = channel.username
+        }
+        let authorId = authorPeer?.id.id._internalGetInt64Value() ?? 0
+        let text = wgramMessageSummary(text: message.text, media: message.media)
+        
+        if !WgramSettings.isAntiDeleteExcluded(peerId: id.peerId) {
+            WgramEventLogger.shared.logDeleted(
+                messageId: message.id,
+                sourceChatPeer: sourceChatPeer,
+                authorTitle: authorTitle,
+                authorUsername: authorUsername,
+                authorId: authorId,
+                text: text,
+                timestamp: message.timestamp
+            )
+        }
+    }
+    
+    if !WgramSettings.antiDeleteMessages || WgramSettings.isAntiDeleteExcluded(peerId: id.peerId) {
         transaction.deleteMessages([id], forEachMedia: nil)
         return
     }
@@ -324,6 +350,17 @@ func _internal_deleteReaction(account: Account, messageId: MessageId, authorId: 
 }
 
 func _internal_clearHistory(transaction: Transaction, mediaBox: MediaBox, peerId: PeerId, threadId: Int64?, namespaces: MessageIdNamespaces) {
+    if WgramSettings.antiDeleteMessages && !WgramSettings.isAntiDeleteExcluded(peerId: peerId) {
+        var messageIdsToMark: [MessageId] = []
+        transaction.withAllMessages(peerId: peerId, { message in
+            messageIdsToMark.append(message.id)
+            return true
+        })
+        for id in messageIdsToMark {
+            markMessageAsDeletedLocally(transaction: transaction, id: id)
+        }
+        return
+    }
     if peerId.namespace == Namespaces.Peer.SecretChat {
         var resourceIds: [MediaResourceId] = []
         transaction.withAllMessages(peerId: peerId, { message in
@@ -339,6 +376,19 @@ func _internal_clearHistory(transaction: Transaction, mediaBox: MediaBox, peerId
 }
 
 func _internal_clearHistoryInRange(transaction: Transaction, mediaBox: MediaBox, peerId: PeerId, threadId: Int64?, minTimestamp: Int32, maxTimestamp: Int32, namespaces: MessageIdNamespaces) {
+    if WgramSettings.antiDeleteMessages && !WgramSettings.isAntiDeleteExcluded(peerId: peerId) {
+        var messageIdsToMark: [MessageId] = []
+        transaction.withAllMessages(peerId: peerId, { message in
+            if message.timestamp >= minTimestamp && message.timestamp <= maxTimestamp {
+                messageIdsToMark.append(message.id)
+            }
+            return true
+        })
+        for id in messageIdsToMark {
+            markMessageAsDeletedLocally(transaction: transaction, id: id)
+        }
+        return
+    }
     if peerId.namespace == Namespaces.Peer.SecretChat {
         var resourceIds: [MediaResourceId] = []
         transaction.withAllMessages(peerId: peerId, { message in

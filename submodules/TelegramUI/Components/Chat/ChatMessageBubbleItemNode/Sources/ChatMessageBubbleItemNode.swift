@@ -5764,6 +5764,19 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         
         strongSelf.updateVisibility(isScroll: false)
         
+        var isDeleted = false
+        for (message, _) in item.content {
+            if message.isDeletedByRemote {
+                isDeleted = true
+                break
+            }
+        }
+        if animation.isAnimated {
+            animation.animator.updateAlpha(layer: strongSelf.layer, alpha: isDeleted ? 0.7 : 1.0, completion: nil)
+        } else {
+            strongSelf.alpha = isDeleted ? 0.7 : 1.0
+        }
+        
         if let (_, f) = strongSelf.awaitingAppliedReaction {
             strongSelf.awaitingAppliedReaction = nil
             

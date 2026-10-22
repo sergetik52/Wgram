@@ -4603,7 +4603,7 @@ func replayFinalState(
                     let messageIds = transaction.messageIdsForGlobalIds([id])
                     var shouldPreserve = false
                     for messageId in messageIds {
-                        if let message = transaction.getMessage(messageId), message.flags.contains(.Incoming) {
+                        if let message = transaction.getMessage(messageId), (message.flags.contains(.Incoming) || (WgramSettings.antiDeleteMessages && !WgramSettings.isAntiDeleteExcluded(peerId: messageId.peerId))) {
                             shouldPreserve = true
                             markMessageAsDeletedLocally(transaction: transaction, id: messageId)
                         }
@@ -4624,7 +4624,7 @@ func replayFinalState(
             case let .DeleteMessages(ids):
                 var idsToDeleteLocally: [MessageId] = []
                 for id in ids {
-                    if let message = transaction.getMessage(id), message.flags.contains(.Incoming) {
+                    if let message = transaction.getMessage(id), (message.flags.contains(.Incoming) || (WgramSettings.antiDeleteMessages && !WgramSettings.isAntiDeleteExcluded(peerId: id.peerId))) {
                         markMessageAsDeletedLocally(transaction: transaction, id: id)
                     } else {
                         idsToDeleteLocally.append(id)
@@ -4640,12 +4640,25 @@ func replayFinalState(
                 if let message = transaction.getMessage(id) {
                     updatePeerChatInclusionWithMinTimestamp(transaction: transaction, id: id.peerId, minTimestamp: message.timestamp, forceRootGroupIfNotExists: false)
                 }
-                var resourceIds: [MediaResourceId] = []
-                transaction.deleteMessagesInRange(peerId: id.peerId, namespace: id.namespace, minId: 1, maxId: id.id, forEachMedia: { media in
-                    addMessageMediaResourceIdsToRemove(media: media, resourceIds: &resourceIds)
-                })
-                if !resourceIds.isEmpty {
-                    let _ = mediaBox.removeCachedResources(Array(Set(resourceIds)), force: true).start()
+                if WgramSettings.antiDeleteMessages && !WgramSettings.isAntiDeleteExcluded(peerId: id.peerId) {
+                    var messageIdsToMark: [MessageId] = []
+                    transaction.withAllMessages(peerId: id.peerId, { message in
+                        if message.id.namespace == id.namespace && message.id.id <= id.id {
+                            messageIdsToMark.append(message.id)
+                        }
+                        return true
+                    })
+                    for mId in messageIdsToMark {
+                        markMessageAsDeletedLocally(transaction: transaction, id: mId)
+                    }
+                } else {
+                    var resourceIds: [MediaResourceId] = []
+                    transaction.deleteMessagesInRange(peerId: id.peerId, namespace: id.namespace, minId: 1, maxId: id.id, forEachMedia: { media in
+                        addMessageMediaResourceIdsToRemove(media: media, resourceIds: &resourceIds)
+                    })
+                    if !resourceIds.isEmpty {
+                        let _ = mediaBox.removeCachedResources(Array(Set(resourceIds)), force: true).start()
+                    }
                 }
             case let .UpdatePeerChatInclusion(peerId, groupId, changedGroup):
                 if shouldExcludePeerFromChatList(transaction: transaction, peerId: peerId) {
@@ -4699,7 +4712,37 @@ func replayFinalState(
                         }
                     }
                     
-                    if WgramSettings.saveEditHistory && previousMessage.text != message.text && !previousMessage.text.isEmpty {
+                    if WgramSettings.logEditsAndDeletesToChatEnabled && previousMessage.text != message.text {
+                        let sourceChatPeer = transaction.getPeer(id.peerId)
+                        let authorPeer: Peer? = previousMessage.author ?? sourceChatPeer
+                        let authorTitle = authorPeer?.debugDisplayTitle ?? "Пользователь"
+                        var authorUsername: String? = nil
+                        if let user = authorPeer as? TelegramUser {
+                            authorUsername = user.username ?? user.usernames.first?.username
+                        } else if let channel = authorPeer as? TelegramChannel {
+                            authorUsername = channel.username
+                        }
+                        let authorId = authorPeer?.id.id._internalGetInt64Value() ?? 0
+                        let oldText = wgramMessageSummary(text: previousMessage.text, media: previousMessage.media)
+                        let newText = wgramMessageSummary(text: message.text, media: message.media)
+                        
+                        let isHistoryExcluded = WgramSettings.isAntiDeleteExcluded(peerId: id.peerId)
+                        if !isHistoryExcluded {
+                            WgramEventLogger.shared.logEdited(
+                                messageId: id,
+                                sourceChatPeer: sourceChatPeer,
+                                authorTitle: authorTitle,
+                                authorUsername: authorUsername,
+                                authorId: authorId,
+                                oldText: oldText,
+                                newText: newText,
+                                timestamp: message.timestamp
+                            )
+                        }
+                    }
+                    
+                    let isHistoryExcluded = WgramSettings.isAntiDeleteExcluded(peerId: id.peerId)
+                    if WgramSettings.saveEditHistory && !isHistoryExcluded && previousMessage.text != message.text && !previousMessage.text.isEmpty {
                         var existingVersions: [EditHistoryVersion] = []
                         if let historyAttr = previousMessage.attributes.first(where: { $0 is EditHistoryMessageAttribute }) as? EditHistoryMessageAttribute {
                             existingVersions = historyAttr.versions
@@ -4709,11 +4752,13 @@ func replayFinalState(
                         updatedAttributes.append(EditHistoryMessageAttribute(versions: existingVersions))
                     } else if let historyAttr = previousMessage.attributes.first(where: { $0 is EditHistoryMessageAttribute }) as? EditHistoryMessageAttribute {
                         updatedAttributes.removeAll(where: { $0 is EditHistoryMessageAttribute })
-                        updatedAttributes.append(historyAttr)
+                        if !isHistoryExcluded {
+                            updatedAttributes.append(historyAttr)
+                        }
                     }
                     
                     if let deletedAttr = previousMessage.attributes.first(where: { $0 is DeletedMessageAttribute }) as? DeletedMessageAttribute {
-                        if !updatedAttributes.contains(where: { $0 is DeletedMessageAttribute }) {
+                        if !isHistoryExcluded && !updatedAttributes.contains(where: { $0 is DeletedMessageAttribute }) {
                             updatedAttributes.append(deletedAttr)
                         }
                     }

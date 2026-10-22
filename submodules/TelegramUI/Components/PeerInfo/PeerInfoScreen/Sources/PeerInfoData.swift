@@ -457,6 +457,7 @@ final class PeerInfoScreenData {
     /// The chat the shared media lists when it is not the profile's own chat: the channel whose
     /// direct messages the profile was opened from.
     let sharedMediaPeer: EnginePeer?
+    let totalMessageCount: Int?
     
     let _isContact: Bool
     var forceIsContact: Bool = false
@@ -516,7 +517,8 @@ final class PeerInfoScreenData {
         savedMusicState: ProfileSavedMusicContext.State?,
         managedByBot: EnginePeer?,
         businessConnectedBot: EnginePeer?,
-        sharedMediaPeer: EnginePeer? = nil
+        sharedMediaPeer: EnginePeer? = nil,
+        totalMessageCount: Int? = nil
     ) {
         self.peer = peer
         self.chatPeer = chatPeer
@@ -565,6 +567,7 @@ final class PeerInfoScreenData {
         self.managedByBot = managedByBot
         self.businessConnectedBot = businessConnectedBot
         self.sharedMediaPeer = sharedMediaPeer
+        self.totalMessageCount = totalMessageCount
     }
 }
 
@@ -1703,8 +1706,18 @@ func peerInfoScreenData(
                     linkedCommunityData = .single(nil)
                 }
                 
-                return combineLatest(linkedCommunityData, sharedMediaPeer)
-                |> map { linkedCommunityData, sharedMediaPeer -> PeerInfoScreenData in
+                let totalMessageCount: Signal<Int?, NoError>
+                if !isMyProfile && userPeerId != context.account.peerId {
+                    totalMessageCount = .single(nil)
+                    |> then(
+                        context.engine.messages.getSearchMessageCount(location: .peer(peerId: userPeerId, fromId: nil, tags: nil, reactions: nil, threadId: nil, minDate: nil, maxDate: nil), query: "")
+                    )
+                } else {
+                    totalMessageCount = .single(nil)
+                }
+                
+                return combineLatest(linkedCommunityData, sharedMediaPeer, totalMessageCount)
+                |> map { linkedCommunityData, sharedMediaPeer, totalMessageCount -> PeerInfoScreenData in
                     var effectiveStatus = status
                     if let linkedPeer = linkedCommunityData?.cachedData?.linkedPeers.first(where: { $0.peerId == userPeerId }), linkedPeer.visible == false, let status = effectiveStatus {
                         effectiveStatus = peerInfoStatusWithHiddenCommunityPrefix(status, strings: strings)
@@ -1757,7 +1770,8 @@ func peerInfoScreenData(
                         savedMusicState: savedMusicState,
                         managedByBot: managedByBot,
                         businessConnectedBot: businessConnectedBot,
-                        sharedMediaPeer: sharedMediaPeer
+                        sharedMediaPeer: sharedMediaPeer,
+                        totalMessageCount: totalMessageCount
                     )
                 }
             }

@@ -322,6 +322,7 @@ filegroup(
 )
 
 alternate_icon_folders = [
+    "WgramIcon",
     "BlackIcon",
     "BlackClassicIcon",
     "BlackFilledIcon",
@@ -1693,6 +1694,8 @@ plist_fragment(
     <key>NSFaceIDUsageDescription</key>
     <string>You can use Face ID to unlock the app.</string>
     <key>NSLocationAlwaysUsageDescription</key>
+    <string>When you send your location to your friends, Telegram needs access to show them a map. You also need this to send locations from an Apple Watch.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
     <string>When you send your location to your friends, Telegram needs access to show them a map. You also need this to send locations from an Apple Watch.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>When you send your location to your friends, Telegram needs access to show them a map.</string>

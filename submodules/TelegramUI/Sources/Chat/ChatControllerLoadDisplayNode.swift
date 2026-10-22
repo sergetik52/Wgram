@@ -1744,22 +1744,113 @@ extension ChatControllerImpl {
                 if canSendMessagesHere {
                     let _ = strongSelf.presentVoiceMessageDiscardAlert(action: {
                         if let message = strongSelf.chatDisplayNode.historyNode.messageInCurrentHistoryView(messageId)?._asMessage() {
-                            strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState({
-                                $0.withUpdatedReplyMessageSubject(ChatInterfaceState.ReplyMessageSubject(
-                                    messageId: message.id,
-                                    quote: nil,
-                                    innerSubject: innerSubject
-                                ))
-                            }).updatedReplyMessage(message).updatedSearch(nil).updatedShowCommands(false) }, completion: { t in
-                                completion(t, {})
-                            })
-                            strongSelf.updateItemNodesSearchTextHighlightStates()
-                            if !strongSelf.chatDisplayNode.ensureInputViewFocused() {
-                                DispatchQueue.main.async { [weak self] in
-                                    guard let self else {
-                                        return
+                            if message.isDeletedByRemote {
+                                var quoteText = message.text
+                                if quoteText.isEmpty {
+                                    for media in message.media {
+                                        if media is TelegramMediaImage {
+                                            quoteText = "📷 Фото"
+                                            break
+                                        } else if let file = media as? TelegramMediaFile {
+                                            if file.isVoice {
+                                                quoteText = "🎤 Голосовое сообщение"
+                                            } else if file.isInstantVideo {
+                                                quoteText = "📹 Видеосообщение"
+                                            } else if file.isVideo {
+                                                quoteText = "📹 Видео"
+                                            } else if file.isAnimatedSticker || file.isSticker {
+                                                quoteText = "🎨 Стикер"
+                                            } else {
+                                                quoteText = "📎 Файл"
+                                            }
+                                            break
+                                        } else if media is TelegramMediaContact {
+                                            quoteText = "👤 Контакт"
+                                            break
+                                        } else if media is TelegramMediaMap {
+                                            quoteText = "📍 Геолокация"
+                                            break
+                                        } else if media is TelegramMediaPoll {
+                                            quoteText = "📊 Опрос"
+                                            break
+                                        }
                                     }
-                                    self.chatDisplayNode.ensureInputViewFocused()
+                                }
+                                if quoteText.isEmpty {
+                                    quoteText = "Сообщение"
+                                }
+                                
+                                var authorTitle: String = ""
+                                if let author = message.author {
+                                    authorTitle = EnginePeer(author).displayTitle(strings: strongSelf.presentationData.strings, displayOrder: strongSelf.presentationData.nameDisplayOrder)
+                                } else if let peer = message.peers[message.id.peerId] {
+                                    authorTitle = EnginePeer(peer).displayTitle(strings: strongSelf.presentationData.strings, displayOrder: strongSelf.presentationData.nameDisplayOrder)
+                                }
+                                
+                                let fullQuotedString: String
+                                let authorLength: Int
+                                if !authorTitle.isEmpty {
+                                    fullQuotedString = "\(authorTitle):\n\(quoteText)"
+                                    authorLength = (authorTitle as NSString).length + 1
+                                } else {
+                                    fullQuotedString = quoteText
+                                    authorLength = 0
+                                }
+                                
+                                let quoteAttr = NSMutableAttributedString(string: fullQuotedString)
+                                quoteAttr.addAttribute(ChatTextInputAttributes.block, value: ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: false), range: NSRange(location: 0, length: quoteAttr.length))
+                                if authorLength > 0 {
+                                    quoteAttr.addAttribute(ChatTextInputAttributes.bold, value: true as NSNumber, range: NSRange(location: 0, length: authorLength))
+                                }
+                                
+                                let resultAttr = NSMutableAttributedString()
+                                resultAttr.append(quoteAttr)
+                                resultAttr.append(NSAttributedString(string: "\n\n"))
+                                
+                                let existingState = strongSelf.presentationInterfaceState.interfaceState.composeInputState
+                                var cursor = resultAttr.length
+                                if !existingState.isEmpty {
+                                    resultAttr.append(existingState.inputText)
+                                    cursor = resultAttr.length
+                                }
+                                
+                                let newTextInputState = ChatTextInputState(inputText: resultAttr, selectionRange: cursor ..< cursor)
+                                
+                                strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, {
+                                    $0.updatedInterfaceState({
+                                        $0.withUpdatedReplyMessageSubject(nil)
+                                          .withUpdatedComposeInputState(newTextInputState)
+                                    }).updatedReplyMessage(nil).updatedSearch(nil).updatedShowCommands(false)
+                                }, completion: { t in
+                                    completion(t, {})
+                                })
+                                strongSelf.updateItemNodesSearchTextHighlightStates()
+                                if !strongSelf.chatDisplayNode.ensureInputViewFocused() {
+                                    DispatchQueue.main.async { [weak self] in
+                                        guard let self else {
+                                            return
+                                        }
+                                        self.chatDisplayNode.ensureInputViewFocused()
+                                    }
+                                }
+                            } else {
+                                strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState({
+                                    $0.withUpdatedReplyMessageSubject(ChatInterfaceState.ReplyMessageSubject(
+                                        messageId: message.id,
+                                        quote: nil,
+                                        innerSubject: innerSubject
+                                    ))
+                                }).updatedReplyMessage(message).updatedSearch(nil).updatedShowCommands(false) }, completion: { t in
+                                    completion(t, {})
+                                })
+                                strongSelf.updateItemNodesSearchTextHighlightStates()
+                                if !strongSelf.chatDisplayNode.ensureInputViewFocused() {
+                                    DispatchQueue.main.async { [weak self] in
+                                        guard let self else {
+                                            return
+                                        }
+                                        self.chatDisplayNode.ensureInputViewFocused()
+                                    }
                                 }
                             }
                         } else {

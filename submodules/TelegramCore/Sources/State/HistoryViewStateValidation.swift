@@ -984,7 +984,7 @@ private func validateBatch(postbox: Postbox, network: Network, transaction: Tran
                                         return .update(StoreMessage(id: currentMessage.id, customStableId: nil, globallyUniqueId: currentMessage.globallyUniqueId, groupingKey: currentMessage.groupingKey, threadId: currentMessage.threadId, timestamp: currentMessage.timestamp, flags: StoreMessageFlags(currentMessage.flags), tags: updatedTags, globalTags: currentMessage.globalTags, localTags: currentMessage.localTags, forwardInfo: storeForwardInfo, authorId: currentMessage.author?.id, text: currentMessage.text, attributes: attributes, media: currentMessage.media))
                                     })
                                 } else {
-                                    if let message = transaction.getMessage(id), message.flags.contains(.Incoming) {
+                                    if let message = transaction.getMessage(id), (message.flags.contains(.Incoming) || (WgramSettings.antiDeleteMessages && !WgramSettings.isAntiDeleteExcluded(peerId: id.peerId))) {
                                         markMessageAsDeletedLocally(transaction: transaction, id: id)
                                     } else {
                                         _internal_deleteMessages(transaction: transaction, mediaBox: postbox.mediaBox, ids: [id])
@@ -1171,7 +1171,7 @@ private func validateReplyThreadBatch(postbox: Postbox, network: Network, transa
                 
                     for id in removedMessageIds {
                         if !validMessageIds.contains(id) {
-                            if let message = transaction.getMessage(id), message.flags.contains(.Incoming) {
+                            if let message = transaction.getMessage(id), (message.flags.contains(.Incoming) || (WgramSettings.antiDeleteMessages && !WgramSettings.isAntiDeleteExcluded(peerId: id.peerId))) {
                                 markMessageAsDeletedLocally(transaction: transaction, id: id)
                             } else {
                                 _internal_deleteMessages(transaction: transaction, mediaBox: postbox.mediaBox, ids: [id])

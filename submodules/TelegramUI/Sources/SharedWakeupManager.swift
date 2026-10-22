@@ -993,7 +993,7 @@ public final class SharedWakeupManager {
         
         var endTaskAfterTransactionsComplete: UIBackgroundTaskIdentifier?
         
-        if self.inForeground || self.hasActiveAudioSession || hasActiveCalls {
+        if self.inForeground || self.hasActiveAudioSession || hasActiveCalls || (WgramSettings.keepAliveInBackground && !self.accountsAndTasks.isEmpty) {
             if let (completion, timer) = self.currentExternalCompletion {
                 self.currentExternalCompletion = nil
                 completion()
@@ -1135,13 +1135,13 @@ public final class SharedWakeupManager {
     private func updateAccounts(hasTasks: Bool, endTaskAfterTransactionsComplete: UIBackgroundTaskIdentifier?) {
         let hasBackgroundLocationTask = self.accountsAndTasks.contains(where: { $0.2.backgroundLocation })
         
-        if self.inForeground || self.hasActiveAudioSession || self.isInBackgroundExtension || self.backgroundProcessingTaskId != nil || self.backgroundStoryProcessingTaskId != nil || hasBackgroundLocationTask || (hasTasks && self.currentExternalCompletion != nil) || self.activeExplicitExtensionTimer != nil || self.silenceAudioRenderer != nil {
+        let isKeepAlive = WgramSettings.keepAliveInBackground
+        if self.inForeground || self.hasActiveAudioSession || self.isInBackgroundExtension || self.backgroundProcessingTaskId != nil || self.backgroundStoryProcessingTaskId != nil || hasBackgroundLocationTask || (hasTasks && self.currentExternalCompletion != nil) || self.activeExplicitExtensionTimer != nil || self.silenceAudioRenderer != nil || (isKeepAlive && !self.accountsAndTasks.isEmpty) {
             Logger.shared.log("Wakeup", "enableBeginTransactions: true (active)")
             
             for (account, primary, tasks) in self.accountsAndTasks {
                 account.postbox.setCanBeginTransactions(true)
                 
-                let isKeepAlive = WgramSettings.keepAliveInBackground
                 if (self.inForeground && primary) || !tasks.isEmpty || (self.activeExplicitExtensionTimer != nil && primary) || (isKeepAlive && primary) {
                     account.shouldBeServiceTaskMaster.set(.single(.always))
                 } else {

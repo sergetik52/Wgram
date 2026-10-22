@@ -262,6 +262,9 @@ final class AuthorizedApplicationContext {
             self.isReady.set(.single(true))
         }
         
+        WgramLocalNotifications.syncSounds(context: context)
+        WgramEventLogger.shared.account = context.account
+        
         let accountId = context.account.id
         self.loggedOutDisposable.set((context.account.loggedOut
         |> deliverOnMainQueue).start(next: { [weak self] value in
@@ -321,8 +324,23 @@ final class AuthorizedApplicationContext {
             }
 
             if let strongSelf = self, let (messages, _, notify, threadData) = messageList.last, let firstMessage = messages.first {
-                if UIApplication.shared.applicationState == .active {
-                    let chatLocation: NavigateToChatControllerParams.Location
+                if UIApplication.shared.applicationState != .active {
+                    if notify {
+                        let presentationData = strongSelf.context.sharedContext.currentPresentationData.with { $0 }
+                        let playSounds = strongSelf.inAppNotificationSettings?.playSounds ?? true
+                        WgramLocalNotifications.postNotification(
+                            context: strongSelf.context,
+                            messages: messages,
+                            threadData: threadData,
+                            playSounds: playSounds,
+                            strings: presentationData.strings,
+                            nameDisplayOrder: presentationData.nameDisplayOrder
+                        )
+                    }
+                    return
+                }
+                
+                let chatLocation: NavigateToChatControllerParams.Location
                     if let _ = threadData, let threadId = firstMessage.threadId {
                         chatLocation = .replyThread(ChatReplyThreadMessage(
                             peerId: firstMessage.id.peerId, threadId: threadId, channelMessageId: nil, isChannelPost: false, isForumPost: true, isMonoforumPost: false, maxMessage: nil, maxReadIncomingMessageId: nil, maxReadOutgoingMessageId: nil, unreadCount: 0, initialFilledHoles: IndexSet(), initialAnchor: .automatic, isNotAvailable: false
@@ -509,19 +527,7 @@ final class AuthorizedApplicationContext {
                             }
                         })
                     }
-                } else {
-                    if notify {
-                        let presentationData = strongSelf.context.sharedContext.currentPresentationData.with { $0 }
-                        WgramLocalNotifications.postNotification(
-                            context: strongSelf.context,
-                            messages: messages,
-                            threadData: threadData,
-                            strings: presentationData.strings,
-                            nameDisplayOrder: presentationData.nameDisplayOrder
-                        )
-                    }
                 }
-            }
         }))
         
         self.termsOfServiceUpdatesDisposable.set((context.account.stateManager.termsOfServiceUpdate
@@ -923,7 +929,11 @@ final class AuthorizedApplicationContext {
                     }
                     
                     let chatLocation: NavigateToChatControllerParams.Location
-                    if let threadId = threadId {
+                    var effectiveThreadId = threadId
+                    if case let .channel(channel) = peer, case .broadcast = channel.info {
+                        effectiveThreadId = nil
+                    }
+                    if let threadId = effectiveThreadId {
                         chatLocation = .replyThread(ChatReplyThreadMessage(
                             peerId: peerId, threadId: threadId, channelMessageId: nil, isChannelPost: false, isForumPost: true, isMonoforumPost: false, maxMessage: nil, maxReadIncomingMessageId: nil, maxReadOutgoingMessageId: nil, unreadCount: 0, initialFilledHoles: IndexSet(), initialAnchor: .automatic, isNotAvailable: false
                         ))

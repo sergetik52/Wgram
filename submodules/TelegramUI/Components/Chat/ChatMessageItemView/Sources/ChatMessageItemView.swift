@@ -687,10 +687,19 @@ open class ChatMessageItemView: ListViewItemNode, ChatMessageItemNodeProtocol {
         self.item = nil
         self.scrollTiltProvider = nil
         self.frame = CGRect()
+        self.alpha = 1.0
     }
     
     open func setupItem(_ item: ChatMessageItem, synchronousLoad: Bool) {
         self.item = item
+        var isDeleted = false
+        for (message, _) in item.content {
+            if message.isDeletedByRemote {
+                isDeleted = true
+                break
+            }
+        }
+        self.alpha = isDeleted ? 0.7 : 1.0
     }
     
     open func updateAccessibilityData(_ accessibilityData: ChatMessageAccessibilityData) {

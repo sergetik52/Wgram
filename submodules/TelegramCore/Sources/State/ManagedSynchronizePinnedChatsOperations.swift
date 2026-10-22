@@ -211,15 +211,13 @@ private func synchronizePinnedChats(transaction: Transaction, postbox: Postbox, 
                 }
             }
             
-            var resultingItemIds: [PinnedItemId]
-            if initialRemoteItemIds == localItemIds {
-                resultingItemIds = remoteItemIds
-            } else {
-                let locallyRemovedFromRemoteItemIds = Set(initialRemoteItemIdsWithoutSecretChats).subtracting(Set(localItemIdsWithoutSecretChats))
-                let remotelyRemovedItemIds = Set(initialRemoteItemIdsWithoutSecretChats).subtracting(Set(remoteItemIds))
-                
-                resultingItemIds = localItemIds.filter { !remotelyRemovedItemIds.contains($0) }
-                resultingItemIds.append(contentsOf: remoteItemIds.filter { !locallyRemovedFromRemoteItemIds.contains($0) && !resultingItemIds.contains($0) })
+            let locallyRemovedFromRemoteItemIds = Set(initialRemoteItemIdsWithoutSecretChats).subtracting(Set(localItemIdsWithoutSecretChats))
+            
+            var resultingItemIds: [PinnedItemId] = localItemIds
+            for id in remoteItemIds {
+                if !resultingItemIds.contains(id) && !locallyRemovedFromRemoteItemIds.contains(id) {
+                    resultingItemIds.append(id)
+                }
             }
             
             return postbox.transaction { transaction -> Signal<Void, NoError> in
@@ -277,7 +275,11 @@ private func synchronizePinnedChats(transaction: Transaction, postbox: Postbox, 
                         }
                     }
                     
-                    return network.request(Api.functions.messages.reorderPinnedDialogs(flags: 1 << 0, folderId: groupId.rawValue, order: inputDialogPeers))
+                    let isPremium = transaction.getPeer(accountPeerId)?.isPremium ?? false
+                    let serverLimit = isPremium ? 10 : 5
+                    let serverDialogPeers = Array(inputDialogPeers.prefix(serverLimit))
+                    
+                    return network.request(Api.functions.messages.reorderPinnedDialogs(flags: 1 << 0, folderId: groupId.rawValue, order: serverDialogPeers))
                     |> `catch` { _ -> Signal<Api.Bool, NoError> in
                         return .single(Api.Bool.boolFalse)
                     }

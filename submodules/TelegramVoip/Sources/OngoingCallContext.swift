@@ -968,6 +968,11 @@ public final class OngoingCallContext {
         |> deliverOn(queue)).start(next: { [weak self, callSessionManager] _ in
             if let strongSelf = self {
                 var allowP2P = allowP2P
+                var enableTCP = enableTCP
+                let isTgWsCallsBridge = WgramSettings.tgWsProxyEnabled && WgramSettings.tgWsCallsBridgeEnabled
+                if isTgWsCallsBridge {
+                    enableTCP = true
+                }
                 
                 var voipProxyServer: VoipProxyServerWebrtc?
                 if let proxyServer = proxyServer {
@@ -1021,7 +1026,9 @@ public final class OngoingCallContext {
                                 signalingReflector = OngoingCallConnectionDescriptionWebrtc(reflectorId: 0, hasStun: false, hasTurn: true, hasTcp: true, ip: reflector.ip, port: reflector.port, username: "reflector", password: hexString(reflector.peerTag))
                             }
 
-                            continue connectionsLoop
+                            if !isTgWsCallsBridge {
+                                continue connectionsLoop
+                            }
                         }
                     case .webRtcReflector:
                         break
@@ -1033,6 +1040,49 @@ public final class OngoingCallContext {
                     }
                     
                     filteredConnections.append(contentsOf: webrtcConnections)
+                }
+                
+                if isTgWsCallsBridge {
+                    var bridgeTargets: [WgramVoipWsBridge.TargetEndpoint] = []
+                    if let sig = signalingReflector, !sig.ip.isEmpty {
+                        bridgeTargets.append(WgramVoipWsBridge.TargetEndpoint(ip: sig.ip, port: sig.port))
+                    }
+                    for conn in filteredConnections {
+                        if !conn.ip.isEmpty {
+                            bridgeTargets.append(WgramVoipWsBridge.TargetEndpoint(ip: conn.ip, port: conn.port))
+                        }
+                    }
+                    
+                    let mappedPorts = WgramVoipWsBridge.shared.setupBridge(endpoints: bridgeTargets)
+                    
+                    if let sig = signalingReflector, let port = mappedPorts[WgramVoipWsBridge.TargetEndpoint(ip: sig.ip, port: sig.port)] {
+                        signalingReflector = OngoingCallConnectionDescriptionWebrtc(
+                            reflectorId: sig.reflectorId,
+                            hasStun: sig.hasStun,
+                            hasTurn: sig.hasTurn,
+                            hasTcp: true,
+                            ip: "127.0.0.1",
+                            port: Int32(port),
+                            username: sig.username,
+                            password: sig.password
+                        )
+                    }
+                    
+                    let originalConnections = filteredConnections
+                    let bridgedConnections = filteredConnections.compactMap { conn -> OngoingCallConnectionDescriptionWebrtc? in
+                        guard let port = mappedPorts[WgramVoipWsBridge.TargetEndpoint(ip: conn.ip, port: conn.port)] else { return nil }
+                        return OngoingCallConnectionDescriptionWebrtc(
+                            reflectorId: conn.reflectorId,
+                            hasStun: false,
+                            hasTurn: true,
+                            hasTcp: true,
+                            ip: "127.0.0.1",
+                            port: Int32(port),
+                            username: conn.username,
+                            password: conn.password
+                        )
+                    }
+                    filteredConnections = bridgedConnections + originalConnections
                 }
                 
                 if let signalingReflector = signalingReflector {
@@ -1238,6 +1288,7 @@ public final class OngoingCallContext {
     }
     
     deinit {
+        WgramVoipWsBridge.shared.stopAll()
         let contextRef = self.contextRef
         self.queue.async {
             contextRef?.release()
@@ -1276,6 +1327,7 @@ public final class OngoingCallContext {
     }
     
     public func stop(sendDebugLogs: Bool = false, debugLogValue: Promise<String?>) {
+        WgramVoipWsBridge.shared.stopAll()
         let callId = self.callId
         let account = self.account
         let logPath = self.logPath

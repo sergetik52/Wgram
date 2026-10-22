@@ -4578,32 +4578,90 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                     }
                 }
                 if let messageId = message?.id, let message = self.chatDisplayNode.historyNode.messageInCurrentHistoryView(messageId)?._asMessage() ?? message {
-                    var quoteData: EngineMessageReplyQuote?
-                    
-                    let nsRange = NSRange(location: range.lowerBound, length: range.upperBound - range.lowerBound)
-                    let quoteText = (message.text as NSString).substring(with: nsRange)
-                    
-                    let trimmedText = trimStringWithEntities(string: quoteText, entities: messageTextEntitiesInRange(entities: message.textEntitiesAttribute?.entities ?? [], range: nsRange, onlyQuoteable: true), maxLength: quoteMaxLength(appConfig: self.context.currentAppConfiguration.with({ $0 })))
-                    if !trimmedText.string.isEmpty {
-                        quoteData = EngineMessageReplyQuote(text: trimmedText.string, offset: nsRange.location, entities: trimmedText.entities, media: nil)
-                    }
-                    
-                    let replySubject = ChatInterfaceState.ReplyMessageSubject(
-                        messageId: message.id,
-                        quote: quoteData,
-                        innerSubject: nil
-                    )
-                    if canSendMessagesToChat(self.presentationInterfaceState) {
-                        let _ = self.presentVoiceMessageDiscardAlert(action: {
-                            self.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState({ $0.withUpdatedReplyMessageSubject(replySubject) }).updatedSearch(nil).updatedShowCommands(false) }, completion: completion)
-                            self.updateItemNodesSearchTextHighlightStates()
-                            self.chatDisplayNode.ensureInputViewFocused()
-                        }, alertAction: {
+                    if message.isDeletedByRemote {
+                        let nsRange = NSRange(location: range.lowerBound, length: range.upperBound - range.lowerBound)
+                        let quoteText = (message.text as NSString).substring(with: nsRange)
+                        
+                        var authorTitle: String = ""
+                        if let author = message.author {
+                            authorTitle = EnginePeer(author).displayTitle(strings: self.presentationData.strings, displayOrder: self.presentationData.nameDisplayOrder)
+                        } else if let peer = message.peers[message.id.peerId] {
+                            authorTitle = EnginePeer(peer).displayTitle(strings: self.presentationData.strings, displayOrder: self.presentationData.nameDisplayOrder)
+                        }
+                        
+                        let fullQuotedString: String
+                        let authorLength: Int
+                        if !authorTitle.isEmpty {
+                            fullQuotedString = "\(authorTitle):\n\(quoteText)"
+                            authorLength = (authorTitle as NSString).length + 1
+                        } else {
+                            fullQuotedString = quoteText
+                            authorLength = 0
+                        }
+                        
+                        let quoteAttr = NSMutableAttributedString(string: fullQuotedString)
+                        quoteAttr.addAttribute(ChatTextInputAttributes.block, value: ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: false), range: NSRange(location: 0, length: quoteAttr.length))
+                        if authorLength > 0 {
+                            quoteAttr.addAttribute(ChatTextInputAttributes.bold, value: true as NSNumber, range: NSRange(location: 0, length: authorLength))
+                        }
+                        
+                        let resultAttr = NSMutableAttributedString()
+                        resultAttr.append(quoteAttr)
+                        resultAttr.append(NSAttributedString(string: "\n\n"))
+                        
+                        let existingState = self.presentationInterfaceState.interfaceState.composeInputState
+                        var cursor = resultAttr.length
+                        if !existingState.isEmpty {
+                            resultAttr.append(existingState.inputText)
+                            cursor = resultAttr.length
+                        }
+                        
+                        let newTextInputState = ChatTextInputState(inputText: resultAttr, selectionRange: cursor ..< cursor)
+                        
+                        if canSendMessagesToChat(self.presentationInterfaceState) {
+                            let _ = self.presentVoiceMessageDiscardAlert(action: {
+                                self.updateChatPresentationInterfaceState(animated: true, interactive: true, {
+                                    $0.updatedInterfaceState({
+                                        $0.withUpdatedReplyMessageSubject(nil)
+                                          .withUpdatedComposeInputState(newTextInputState)
+                                    }).updatedReplyMessage(nil).updatedSearch(nil).updatedShowCommands(false)
+                                }, completion: completion)
+                                self.updateItemNodesSearchTextHighlightStates()
+                                self.chatDisplayNode.ensureInputViewFocused()
+                            }, alertAction: {
+                                completion(nil)
+                            }, delay: true)
+                        } else {
                             completion(nil)
-                        }, delay: true)
+                        }
                     } else {
-                        moveReplyMessageToAnotherChat(selfController: self, replySubject: replySubject)
-                        completion(nil)
+                        var quoteData: EngineMessageReplyQuote?
+                        
+                        let nsRange = NSRange(location: range.lowerBound, length: range.upperBound - range.lowerBound)
+                        let quoteText = (message.text as NSString).substring(with: nsRange)
+                        
+                        let trimmedText = trimStringWithEntities(string: quoteText, entities: messageTextEntitiesInRange(entities: message.textEntitiesAttribute?.entities ?? [], range: nsRange, onlyQuoteable: true), maxLength: quoteMaxLength(appConfig: self.context.currentAppConfiguration.with({ $0 })))
+                        if !trimmedText.string.isEmpty {
+                            quoteData = EngineMessageReplyQuote(text: trimmedText.string, offset: nsRange.location, entities: trimmedText.entities, media: nil)
+                        }
+                        
+                        let replySubject = ChatInterfaceState.ReplyMessageSubject(
+                            messageId: message.id,
+                            quote: quoteData,
+                            innerSubject: nil
+                        )
+                        if canSendMessagesToChat(self.presentationInterfaceState) {
+                            let _ = self.presentVoiceMessageDiscardAlert(action: {
+                                self.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState({ $0.withUpdatedReplyMessageSubject(replySubject) }).updatedSearch(nil).updatedShowCommands(false) }, completion: completion)
+                                self.updateItemNodesSearchTextHighlightStates()
+                                self.chatDisplayNode.ensureInputViewFocused()
+                            }, alertAction: {
+                                completion(nil)
+                            }, delay: true)
+                        } else {
+                            moveReplyMessageToAnotherChat(selfController: self, replySubject: replySubject)
+                            completion(nil)
+                        }
                     }
                 } else {
                     self.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState({ $0.withUpdatedReplyMessageSubject(nil).withUpdatedSendMessageEffect(nil).withUpdatedPostSuggestionState(nil) }) }, completion: completion)
@@ -7868,6 +7926,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         
         if let peerId = self.chatLocation.peerId {
             let _ = clearPeerUnseenReactionsAndPollVotesInteractively(account: self.context.account, peerId: peerId, threadId: self.chatLocation.threadId).startStandalone()
+            let _ = clearPeerUnseenPersonalMessagesInteractively(account: self.context.account, peerId: peerId, threadId: self.chatLocation.threadId).startStandalone()
         }
         
         self.chatDisplayNode.historyNode.experimentalSnapScrollToItem = false

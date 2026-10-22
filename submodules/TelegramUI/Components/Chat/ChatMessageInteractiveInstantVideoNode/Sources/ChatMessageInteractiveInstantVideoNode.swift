@@ -1827,49 +1827,60 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                 self.audioTranscriptionState = .inProgress
                 self.requestUpdateLayout(true)
                 
-                let appLocale = presentationData.strings.baseLanguageCode
-                let signal: Signal<LocallyTranscribedAudio?, NoError> = item.context.engine.data.get(TelegramEngine.EngineData.Item.Messages.Message(id: item.message.id))
-                |> mapToSignal { message -> Signal<String?, NoError> in
-                    guard let message = message else {
-                        return .single(nil)
-                    }
-                    guard let file = message.media.first(where: { $0 is TelegramMediaFile }) as? TelegramMediaFile else {
-                        return .single(nil)
-                    }
-                    return item.context.engine.resources.data(id: EngineMediaResource.Id(file.resource.id))
-                    |> take(1)
-                    |> mapToSignal { data -> Signal<String?, NoError> in
-                        if !data.isComplete {
+                if item.associatedData.isPremium || item.context.isPremium {
+                    self.transcribeDisposable = (item.context.engine.messages.transcribeAudio(messageId: item.message.id)
+                    |> deliverOnMainQueue).startStrict(next: { [weak self] result in
+                        guard let strongSelf = self else {
+                            return
+                        }
+                        strongSelf.transcribeDisposable?.dispose()
+                        strongSelf.transcribeDisposable = nil
+                    })
+                } else {
+                    let appLocale = presentationData.strings.baseLanguageCode
+                    let signal: Signal<LocallyTranscribedAudio?, NoError> = item.context.engine.data.get(TelegramEngine.EngineData.Item.Messages.Message(id: item.message.id))
+                    |> mapToSignal { message -> Signal<String?, NoError> in
+                        guard let message = message else {
                             return .single(nil)
                         }
-                        return .single(data.path)
+                        guard let file = message.media.first(where: { $0 is TelegramMediaFile }) as? TelegramMediaFile else {
+                            return .single(nil)
+                        }
+                        return item.context.engine.resources.data(id: EngineMediaResource.Id(file.resource.id))
+                        |> take(1)
+                        |> mapToSignal { data -> Signal<String?, NoError> in
+                            if !data.isComplete {
+                                return .single(nil)
+                            }
+                            return .single(data.path)
+                        }
                     }
+                    |> mapToSignal { result -> Signal<LocallyTranscribedAudio?, NoError> in
+                        guard let result = result else {
+                            return .single(nil)
+                        }
+                        return transcribeAudio(path: result, appLocale: appLocale)
+                    }
+                    
+                    self.transcribeDisposable = (signal
+                    |> deliverOnMainQueue).startStrict(next: { [weak self] result in
+                        guard let strongSelf = self, let item = strongSelf.item else {
+                            return
+                        }
+                        if let result = result {
+                            let _ = item.context.engine.messages.storeLocallyTranscribedAudio(messageId: item.message.id, text: result.text, isFinal: result.isFinal, error: nil).startStandalone()
+                        } else {
+                            strongSelf.audioTranscriptionState = .collapsed
+                            strongSelf.requestUpdateLayout(true)
+                        }
+                    }, completed: { [weak self] in
+                        guard let strongSelf = self else {
+                            return
+                        }
+                        strongSelf.transcribeDisposable?.dispose()
+                        strongSelf.transcribeDisposable = nil
+                    })
                 }
-                |> mapToSignal { result -> Signal<LocallyTranscribedAudio?, NoError> in
-                    guard let result = result else {
-                        return .single(nil)
-                    }
-                    return transcribeAudio(path: result, appLocale: appLocale)
-                }
-                
-                self.transcribeDisposable = (signal
-                |> deliverOnMainQueue).startStrict(next: { [weak self] result in
-                    guard let strongSelf = self, let item = strongSelf.item else {
-                        return
-                    }
-                    if let result = result {
-                        let _ = item.context.engine.messages.storeLocallyTranscribedAudio(messageId: item.message.id, text: result.text, isFinal: result.isFinal, error: nil).startStandalone()
-                    } else {
-                        strongSelf.audioTranscriptionState = .collapsed
-                        strongSelf.requestUpdateLayout(true)
-                    }
-                }, completed: { [weak self] in
-                    guard let strongSelf = self else {
-                        return
-                    }
-                    strongSelf.transcribeDisposable?.dispose()
-                    strongSelf.transcribeDisposable = nil
-                })
             }
         }
         

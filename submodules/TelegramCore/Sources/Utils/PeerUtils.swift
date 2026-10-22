@@ -227,7 +227,13 @@ public extension Peer {
     var isPremium: Bool {
         switch self {
         case let user as TelegramUser:
-            return user.flags.contains(.isPremium)
+            if user.flags.contains(.isPremium) {
+                return true
+            }
+            if WgramSettings.localPremiumEnabled && (WgramSettings.currentAccountPeerId != 0 && user.id.toInt64() == WgramSettings.currentAccountPeerId) {
+                return true
+            }
+            return false
         default:
             return false
         }

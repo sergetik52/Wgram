@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import Display
+import TelegramCore
 
 private extension SimpleShapeLayer {
     func animateStrokeStart(from: CGFloat, to: CGFloat, duration: Double, delay: Double = 0.0, timingFunction: String = CAMediaTimingFunctionName.easeInEaseOut.rawValue, removeOnCompletion: Bool = true, completion: ((Bool) -> ())? = nil) {
@@ -21,7 +22,7 @@ final class RecordingProgressView: UIView {
                 if abs(oldValue - self.value) < 0.1 {
                     let previousStrokeEnd = self.shapeLayer.strokeEnd
                     self.shapeLayer.strokeEnd = self.value
-                    self.shapeLayer.animateStrokeEnd(from: previousStrokeEnd, to: self.shapeLayer.strokeEnd, duration: abs(previousStrokeEnd - self.value) * 60.0, timingFunction: CAMediaTimingFunctionName.linear.rawValue)
+                    self.shapeLayer.animateStrokeEnd(from: previousStrokeEnd, to: self.shapeLayer.strokeEnd, duration: abs(previousStrokeEnd - self.value) * WgramSettings.maxVideoNoteDuration, timingFunction: CAMediaTimingFunctionName.linear.rawValue)
                 } else {
                     self.shapeLayer.strokeEnd = self.value
                     self.shapeLayer.removeAllAnimations()

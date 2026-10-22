@@ -297,6 +297,10 @@ NSObject * _Nullable makeColorMatrixFilter() {
 static const void *layerDisableScreenshotsKey = &layerDisableScreenshotsKey;
 
 void setLayerDisableScreenshots(CALayer * _Nonnull layer, bool disableScreenshots) {
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"Wgram_BypassViewOnce"] || [[NSUserDefaults standardUserDefaults] boolForKey:@"Wgram_BypassCopyProtection"]) {
+        disableScreenshots = false;
+    }
+    
     static UITextField *textField = nil;
     static UIView *secureView = nil;
     static dispatch_once_t onceToken;

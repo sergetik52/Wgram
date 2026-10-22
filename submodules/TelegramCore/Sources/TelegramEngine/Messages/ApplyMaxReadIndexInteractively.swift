@@ -401,3 +401,57 @@ public func _internal_forceMarkPeerAsRead(account: Account, peerId: PeerId) {
         return request
     }).startStandalone()
 }
+
+public func _internal_forceMarkMessageAsRead(account: Account, messageId: MessageId) {
+    let _ = (account.postbox.transaction { transaction -> (Api.InputPeer?, Int32?, Peer?, Int64?) in
+        guard let peer = transaction.getPeer(messageId.peerId), let inputPeer = apiInputPeer(peer) else {
+            return (nil, nil, nil, nil)
+        }
+        let message = transaction.getMessage(messageId)
+        let index = message?.index ?? MessageIndex(id: messageId, timestamp: 0)
+        _internal_applyMaxReadIndexInteractively(transaction: transaction, stateManager: account.stateManager, index: index)
+        account.viewTracker.updateMarkAllMentionsSeen(peerId: messageId.peerId, threadId: message?.threadId)
+        account.viewTracker.updateMarkAllReactionsAndPollVotesSeen(peerId: messageId.peerId, threadId: message?.threadId)
+        return (inputPeer, messageId.id, peer, message?.threadId)
+    }
+    |> mapToSignal { (inputPeer, maxId, peer, threadId) -> Signal<Void, NoError> in
+        guard let inputPeer = inputPeer, let maxId = maxId, let peer = peer else {
+            return .complete()
+        }
+        
+        if let threadId = threadId {
+            if peer.isForum {
+                return account.network.request(Api.functions.messages.readDiscussion(peer: inputPeer, msgId: Int32(clamping: threadId), readMaxId: maxId))
+                |> `catch` { _ -> Signal<Api.Bool, NoError> in return .single(.boolFalse) }
+                |> mapToSignal { _ -> Signal<Void, NoError> in return .complete() }
+            } else if peer.isMonoForum {
+                return account.postbox.transaction { transaction -> Api.InputPeer? in
+                    return transaction.getPeer(PeerId(threadId)).flatMap(apiInputPeer)
+                }
+                |> mapToSignal { subPeer -> Signal<Void, NoError> in
+                    guard let subPeer = subPeer else {
+                        return .complete()
+                    }
+                    return account.network.request(Api.functions.messages.readSavedHistory(parentPeer: inputPeer, peer: subPeer, maxId: maxId))
+                    |> `catch` { _ -> Signal<Api.Bool, NoError> in return .single(.boolFalse) }
+                    |> mapToSignal { _ -> Signal<Void, NoError> in return .complete() }
+                }
+            }
+        }
+        
+        let request: Signal<Void, NoError>
+        switch inputPeer {
+        case let .inputPeerChannel(inputPeerChannelData):
+            let (channelId, accessHash) = (inputPeerChannelData.channelId, inputPeerChannelData.accessHash)
+            request = account.network.request(Api.functions.channels.readHistory(channel: .inputChannel(.init(channelId: channelId, accessHash: accessHash)), maxId: maxId))
+            |> `catch` { _ -> Signal<Api.Bool, NoError> in return .single(.boolFalse) }
+            |> mapToSignal { _ -> Signal<Void, NoError> in return .complete() }
+        default:
+            request = account.network.request(Api.functions.messages.readHistory(peer: inputPeer, maxId: maxId))
+            |> map(Optional.init)
+            |> `catch` { _ -> Signal<Api.messages.AffectedMessages?, NoError> in return .single(nil) }
+            |> mapToSignal { _ -> Signal<Void, NoError> in return .complete() }
+        }
+        return request
+    }).startStandalone()
+}

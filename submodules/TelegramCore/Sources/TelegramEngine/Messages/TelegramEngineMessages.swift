@@ -107,6 +107,10 @@ public extension TelegramEngine {
             return _internal_applyMaxReadIndexInteractively(postbox: self.account.postbox, stateManager: self.account.stateManager, index: index)
         }
 
+        public func forceMarkMessageAsRead(messageId: MessageId) {
+            _internal_forceMarkMessageAsRead(account: self.account, messageId: messageId)
+        }
+
         /// For callers holding only a message id, such as a notification action or a Siri
         /// intent. Prefer `applyMaxReadIndexInteractively(index:)` wherever a real
         /// `MessageIndex` is at hand: a made-up index is wrong for an index-based read

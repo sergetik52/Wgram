@@ -4,17 +4,20 @@ import UserNotifications
 import Intents
 import TelegramCore
 import Postbox
+import SwiftSignalKit
 import AccountContext
 import TelegramPresentationData
 import TelegramUIPreferences
 import Display
 import AvatarNode
+import AVFoundation
 
 public final class WgramLocalNotifications {
     public static func postNotification(
         context: AccountContext,
         messages: [EngineRawMessage],
         threadData: EngineMessageHistoryThreadData?,
+        playSounds: Bool = true,
         strings: PresentationStrings,
         nameDisplayOrder: PresentationPersonNameOrder
     ) {
@@ -31,187 +34,227 @@ public final class WgramLocalNotifications {
             return
         }
         
-        // 4. Check if chat is muted
-        let isMuted = firstMessage.attributes.contains(where: { attribute in
-            if let attribute = attribute as? NotificationInfoMessageAttribute {
-                return attribute.flags.contains(.muted)
+        // 4. Query Telegram's native notification settings (sound, mute, preview)
+        let _ = (context.account.postbox.transaction { transaction -> (notify: Bool, sound: PeerMessageSound, displayContents: Bool, soundResource: MediaResource?, soundFileId: Int64?) in
+            let info = messagesForNotification(transaction: transaction, id: firstMessage.id, alwaysReturnMessage: true)
+            var soundResource: MediaResource? = nil
+            var soundFileId: Int64? = nil
+            
+            var targetFileId: Int64? = nil
+            switch info.sound {
+            case .none, .default:
+                break
+            case let .cloud(fileId):
+                targetFileId = fileId
+            case let .bundledModern(id):
+                targetFileId = cloudSoundMapping[id + 100]
+            case let .bundledClassic(id):
+                targetFileId = cloudSoundMapping[id + 2]
             }
-            return false
-        })
-        if isMuted {
-            return
-        }
-        
-        // 5. Determine Sender and Group
-        let mainPeer = messageMainPeer(EngineMessage(firstMessage))
-        let authorPeer = firstMessage.author.flatMap { EnginePeer($0) }
-        
-        var senderPeer: EnginePeer?
-        var groupTitle: String?
-        var isGroup = false
-        
-        if let main = mainPeer {
-            if let author = authorPeer, author.id != main.id {
-                // Message in group/supergroup from an author
-                senderPeer = author
-                isGroup = true
-                if let threadData = threadData {
-                    groupTitle = "\(threadData.info.title) (\(main.displayTitle(strings: strings, displayOrder: nameDisplayOrder)))"
-                } else {
-                    groupTitle = main.displayTitle(strings: strings, displayOrder: nameDisplayOrder)
-                }
-            } else {
-                // 1-on-1 chat or channel broadcast
-                senderPeer = main
-                isGroup = false
-            }
-        } else {
-            senderPeer = authorPeer
-        }
-        
-        guard let effectiveSenderPeer = senderPeer else { return }
-        let senderName = effectiveSenderPeer.displayTitle(strings: strings, displayOrder: nameDisplayOrder)
-        
-        // Fallback title for non-intent notifications
-        var title = senderName
-        if isGroup, let group = groupTitle {
-            title = "\(senderName) (\(group))"
-        }
-        
-        // 6. Build Body preview
-        var body = firstMessage.text
-        if body.isEmpty {
-            for media in firstMessage.media {
-                if media is TelegramMediaImage {
-                    body = "📷 Фото"
-                    break
-                } else if let file = media as? TelegramMediaFile {
-                    if file.isVoice {
-                        body = "🎤 Голосовое сообщение"
-                    } else if file.isInstantVideo {
-                        body = "📹 Видеосообщение"
-                    } else if file.isVideo {
-                        body = "📹 Видео"
-                    } else if file.isAnimatedSticker || file.isSticker {
-                        body = "🎨 Стикер"
-                    } else {
-                        body = "📎 Файл"
+            
+            if let fileId = targetFileId {
+                soundFileId = fileId
+                if let list = _internal_cachedNotificationSoundList(transaction: transaction) {
+                    if let item = list.sounds.first(where: { $0.file.fileId.id == fileId }) {
+                        soundResource = item.file.resource
                     }
-                    break
-                } else if media is TelegramMediaContact {
-                    body = "👤 Контакт"
-                    break
-                } else if media is TelegramMediaMap {
-                    body = "📍 Геолокация"
-                    break
-                } else if media is TelegramMediaPoll {
-                    body = "📊 Опрос"
-                    break
                 }
             }
+            return (info.notify, info.sound, info.displayContents, soundResource, soundFileId)
         }
-        if body.isEmpty {
-            body = "Новое сообщение"
-        }
-        
-        // 7. Base notification content
-        let content = UNMutableNotificationContent()
-        content.title = title
-        switch WgramSettings.notificationSound {
-        case "telegram":
-            content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "0.m4a"))
-        case "silent":
-            content.sound = nil
-        default:
-            content.sound = .default
-        }
-        
-        if isGroup {
-            content.categoryIdentifier = "gr"
-        } else if mainPeer?.id.namespace == Namespaces.Peer.CloudChannel {
-            content.categoryIdentifier = "c"
-        } else {
-            content.categoryIdentifier = "r"
-        }
-        
-        var userInfo: [String: Any] = [
-            "peerId": firstMessage.id.peerId.toInt64(),
-            "messageId.namespace": firstMessage.id.namespace,
-            "messageId.id": firstMessage.id.id,
-            "userId": Int(context.account.peerId.id._internalGetInt64Value())
-        ]
-        if let threadId = firstMessage.threadId {
-            userInfo["threadId"] = threadId
-        }
-        content.userInfo = userInfo
-        
-        var finalContent: UNNotificationContent = content
-        
-        // 8. Communication Notification with Contact Avatar (iOS 15+)
-        if #available(iOS 15.0, *) {
-            let avatarImage = self.getAvatarImage(context: context, peer: effectiveSenderPeer)
+        |> deliverOnMainQueue).start(next: { notify, messageSound, displayContents, soundResource, soundFileId in
+            guard notify else { return }
             
-            var personNameComponents = PersonNameComponents()
-            if let user = effectiveSenderPeer._asPeer() as? TelegramUser {
-                personNameComponents.givenName = user.firstName
-                personNameComponents.familyName = user.lastName
+            // 5. Determine Sender and Group
+            let mainPeer = messageMainPeer(EngineMessage(firstMessage))
+            let authorPeer = firstMessage.author.flatMap { EnginePeer($0) }
+            
+            var senderPeer: EnginePeer?
+            var groupTitle: String?
+            var isGroup = false
+            
+            if let main = mainPeer {
+                if let author = authorPeer, author.id != main.id {
+                    // Message in group/supergroup from an author
+                    senderPeer = author
+                    isGroup = true
+                    if let threadData = threadData {
+                        groupTitle = "\(threadData.info.title) (\(main.displayTitle(strings: strings, displayOrder: nameDisplayOrder)))"
+                    } else {
+                        groupTitle = main.displayTitle(strings: strings, displayOrder: nameDisplayOrder)
+                    }
+                } else {
+                    // 1-on-1 chat or channel broadcast
+                    senderPeer = main
+                    isGroup = false
+                }
             } else {
-                personNameComponents.nickname = senderName
+                senderPeer = authorPeer
             }
             
-            let senderPerson = INPerson(
-                personHandle: INPersonHandle(value: "\(effectiveSenderPeer.id.toInt64())", type: .unknown),
-                nameComponents: personNameComponents,
-                displayName: senderName,
-                image: avatarImage,
-                contactIdentifier: nil,
-                customIdentifier: "\(effectiveSenderPeer.id.toInt64())",
-                isMe: false,
-                suggestionType: .none
-            )
+            guard let effectiveSenderPeer = senderPeer else { return }
+            let senderName = effectiveSenderPeer.displayTitle(strings: strings, displayOrder: nameDisplayOrder)
             
-            let mePerson = INPerson(
-                personHandle: INPersonHandle(value: "0", type: .unknown),
-                nameComponents: nil,
-                displayName: nil,
-                image: nil,
-                contactIdentifier: nil,
-                customIdentifier: nil,
-                isMe: true,
-                suggestionType: .none
-            )
-            
-            let speakableGroup: INSpeakableString? = (isGroup && groupTitle != nil) ? INSpeakableString(spokenPhrase: groupTitle!) : nil
-            let conversationId = "\(firstMessage.id.peerId.toInt64())"
-            
-            let intent = INSendMessageIntent(
-                recipients: [mePerson],
-                outgoingMessageType: .outgoingMessageText,
-                content: body,
-                speakableGroupName: speakableGroup,
-                conversationIdentifier: conversationId,
-                serviceName: nil,
-                sender: senderPerson,
-                attachments: nil
-            )
-            if let avatarImage = avatarImage {
-                intent.setImage(avatarImage, forParameterNamed: \.sender)
+            // Fallback title for non-intent notifications
+            var title = senderName
+            if isGroup, let group = groupTitle {
+                title = "\(senderName) (\(group))"
             }
             
-            let interaction = INInteraction(intent: intent, response: nil)
-            interaction.direction = .incoming
-            interaction.donate(completion: nil)
-            
-            do {
-                finalContent = try content.updating(from: intent)
-            } catch {
-                print("[Wgram] updating(from: intent) error: \(error)")
+            // 6. Build Body preview
+            var body = firstMessage.text
+            if !displayContents {
+                body = "Новое сообщение"
+            } else if body.isEmpty {
+                for media in firstMessage.media {
+                    if media is TelegramMediaImage {
+                        body = "📷 Фото"
+                        break
+                    } else if let file = media as? TelegramMediaFile {
+                        if file.isVoice {
+                            body = "🎤 Голосовое сообщение"
+                        } else if file.isInstantVideo {
+                            body = "📹 Видеосообщение"
+                        } else if file.isVideo {
+                            body = "📹 Видео"
+                        } else if file.isAnimatedSticker || file.isSticker {
+                            body = "🎨 Стикер"
+                        } else {
+                            body = "📎 Файл"
+                        }
+                        break
+                    } else if media is TelegramMediaContact {
+                        body = "👤 Контакт"
+                        break
+                    } else if media is TelegramMediaMap {
+                        body = "📍 Геолокация"
+                        break
+                    } else if media is TelegramMediaPoll {
+                        body = "📊 Опрос"
+                        break
+                    }
+                }
             }
-        }
-        
-        let identifier = "wgram_msg_\(firstMessage.id.peerId.toInt64())_\(firstMessage.id.id)"
-        let request = UNNotificationRequest(identifier: identifier, content: finalContent, trigger: nil)
-        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+            if body.isEmpty {
+                body = "Новое сообщение"
+            }
+            
+            // 7. Base notification content
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            
+            // Pull sound from Telegram settings
+            if !playSounds || messageSound == .none {
+                content.sound = nil
+            } else if messageSound == .default {
+                content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "0.m4a"))
+            } else if let fileId = soundFileId {
+                let soundName = self.resolveSound(context: context, fileId: fileId, soundResource: soundResource)
+                content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: soundName))
+            } else {
+                content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "0.m4a"))
+            }
+            
+            var isBroadcastChannel = false
+            if let channel = mainPeer?._asPeer() as? TelegramChannel, case .broadcast = channel.info {
+                isBroadcastChannel = true
+            }
+
+            if isGroup {
+                content.categoryIdentifier = "gr"
+            } else if isBroadcastChannel || mainPeer?.id.namespace == Namespaces.Peer.CloudChannel {
+                content.categoryIdentifier = "c"
+            } else {
+                content.categoryIdentifier = "r"
+            }
+            
+            var userInfo: [String: Any] = [
+                "peerId": firstMessage.id.peerId.toInt64(),
+                "messageId.namespace": firstMessage.id.namespace,
+                "messageId.id": firstMessage.id.id,
+                "userId": Int(context.account.peerId.id._internalGetInt64Value())
+            ]
+            if threadData != nil, let threadId = firstMessage.threadId, !isBroadcastChannel {
+                userInfo["threadId"] = threadId
+            }
+            content.userInfo = userInfo
+            
+            var finalContent: UNNotificationContent = content
+            
+            // 8. Communication Notification with Contact Avatar (iOS 15+)
+            if #available(iOS 15.0, *) {
+                let avatarImage = self.getAvatarImage(context: context, peer: effectiveSenderPeer)
+                
+                var personNameComponents = PersonNameComponents()
+                if let user = effectiveSenderPeer._asPeer() as? TelegramUser {
+                    personNameComponents.givenName = user.firstName
+                    personNameComponents.familyName = user.lastName
+                } else {
+                    personNameComponents.nickname = senderName
+                }
+                
+                let senderPerson = INPerson(
+                    personHandle: INPersonHandle(value: "\(effectiveSenderPeer.id.toInt64())", type: .unknown),
+                    nameComponents: personNameComponents,
+                    displayName: senderName,
+                    image: avatarImage,
+                    contactIdentifier: nil,
+                    customIdentifier: "\(effectiveSenderPeer.id.toInt64())",
+                    isMe: false,
+                    suggestionType: .none
+                )
+                
+                let mePerson = INPerson(
+                    personHandle: INPersonHandle(value: "0", type: .unknown),
+                    nameComponents: nil,
+                    displayName: nil,
+                    image: nil,
+                    contactIdentifier: nil,
+                    customIdentifier: nil,
+                    isMe: true,
+                    suggestionType: .none
+                )
+                
+                let speakableGroup: INSpeakableString? = (isGroup && groupTitle != nil) ? INSpeakableString(spokenPhrase: groupTitle!) : nil
+                let conversationId = "\(firstMessage.id.peerId.toInt64())"
+                
+                let intent = INSendMessageIntent(
+                    recipients: [mePerson],
+                    outgoingMessageType: .outgoingMessageText,
+                    content: body,
+                    speakableGroupName: speakableGroup,
+                    conversationIdentifier: conversationId,
+                    serviceName: nil,
+                    sender: senderPerson,
+                    attachments: nil
+                )
+                if let avatarImage = avatarImage {
+                    intent.setImage(avatarImage, forParameterNamed: \.sender)
+                }
+                
+                let interaction = INInteraction(intent: intent, response: nil)
+                interaction.direction = .incoming
+                interaction.donate(completion: nil)
+                
+                do {
+                    let updated = try content.updating(from: intent)
+                    if updated.body.isEmpty && !body.isEmpty {
+                        let mutable = updated.mutableCopy() as? UNMutableNotificationContent ?? content
+                        mutable.body = body
+                        finalContent = mutable
+                    } else {
+                        finalContent = updated
+                    }
+                } catch {
+                    print("[Wgram] updating(from: intent) error: \(error)")
+                }
+            }
+            
+            let identifier = "wgram_msg_\(firstMessage.id.peerId.toInt64())_\(firstMessage.id.id)"
+            let request = UNNotificationRequest(identifier: identifier, content: finalContent, trigger: nil)
+            UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+        })
     }
     
     private static func getAvatarImage(context: AccountContext, peer: EnginePeer) -> INImage? {
@@ -276,5 +319,85 @@ public final class WgramLocalNotifications {
         } catch {
             return nil
         }
+    }
+    
+    private static func resolveSound(context: AccountContext, fileId: Int64, soundResource: MediaResource?) -> String {
+        guard let librarySounds = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first?.appendingPathComponent("Sounds", isDirectory: true) else {
+            return "0.m4a"
+        }
+        let _ = try? FileManager.default.createDirectory(at: librarySounds, withIntermediateDirectories: true, attributes: nil)
+        
+        let destName = "tg_\(fileId).m4a"
+        let destUrl = librarySounds.appendingPathComponent(destName)
+        if FileManager.default.fileExists(atPath: destUrl.path) {
+            return destName
+        }
+        
+        if let resource = soundResource, let path = context.account.postbox.mediaBox.completedResourcePath(resource) {
+            self.copyOrConvertSound(sourcePath: path, destUrl: destUrl)
+            if FileManager.default.fileExists(atPath: destUrl.path) {
+                return destName
+            }
+        }
+        
+        self.syncSounds(context: context)
+        return "0.m4a"
+    }
+
+    private static func copyOrConvertSound(sourcePath: String, destUrl: URL) {
+        let sourceUrl = URL(fileURLWithPath: sourcePath)
+        if let headerData = try? Data(contentsOf: sourceUrl, options: .alwaysMapped), headerData.count >= 12 {
+            let isM4A = headerData.subdata(in: 4..<8) == Data([0x66, 0x74, 0x79, 0x70]) // "ftyp"
+            if isM4A {
+                try? FileManager.default.copyItem(at: sourceUrl, to: destUrl)
+                return
+            }
+        }
+        
+        let asset = AVURLAsset(url: sourceUrl)
+        if let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) {
+            exportSession.outputURL = destUrl
+            exportSession.outputFileType = .m4a
+            exportSession.exportAsynchronously {
+                if exportSession.status != .completed {
+                    if !FileManager.default.fileExists(atPath: destUrl.path) {
+                        try? FileManager.default.copyItem(at: sourceUrl, to: destUrl)
+                    }
+                }
+            }
+        } else {
+            try? FileManager.default.copyItem(at: sourceUrl, to: destUrl)
+        }
+    }
+
+    public static func syncSounds(context: AccountContext) {
+        guard let librarySounds = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first?.appendingPathComponent("Sounds", isDirectory: true) else {
+            return
+        }
+        let _ = try? FileManager.default.createDirectory(at: librarySounds, withIntermediateDirectories: true, attributes: nil)
+        
+        let _ = (context.engine.peers.notificationSoundList()
+        |> take(1)
+        |> deliverOnMainQueue).start(next: { list in
+            guard let list = list else { return }
+            for item in list.sounds {
+                let fileId = item.file.fileId.id
+                let destUrl = librarySounds.appendingPathComponent("tg_\(fileId).m4a")
+                if !FileManager.default.fileExists(atPath: destUrl.path) {
+                    if let path = context.account.postbox.mediaBox.completedResourcePath(item.file.resource, pathExtension: nil) {
+                        self.copyOrConvertSound(sourcePath: path, destUrl: destUrl)
+                    } else {
+                        let _ = fetchedMediaResource(
+                            mediaBox: context.account.postbox.mediaBox,
+                            userLocation: .other,
+                            userContentType: .file,
+                            reference: .soundList(resource: item.file.resource)
+                        ).start()
+                    }
+                }
+            }
+        })
+        
+        let _ = ensureDownloadedNotificationSoundList(postbox: context.account.postbox).start()
     }
 }

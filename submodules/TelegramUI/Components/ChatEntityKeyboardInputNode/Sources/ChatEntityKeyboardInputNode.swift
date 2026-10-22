@@ -148,6 +148,9 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
     }
 
     public static func hasPremium(context: AccountContext, chatPeerId: EnginePeer.Id?, premiumIfSavedMessages: Bool) -> Signal<Bool, NoError> {
+        if WgramSettings.localPremiumEnabled {
+            return .single(true)
+        }
         let hasPremium: Signal<Bool, NoError>
         if premiumIfSavedMessages, let chatPeerId = chatPeerId, chatPeerId == context.account.peerId {
             hasPremium = .single(true)

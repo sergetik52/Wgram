@@ -303,7 +303,7 @@ func processSecretChatIncomingDecryptedOperations(encryptionProvider: Encryption
                                         }
                                         var idsToDeleteLocally: [MessageId] = []
                                         for id in filteredMessageIds {
-                                            if let message = transaction.getMessage(id), message.flags.contains(.Incoming) {
+                                            if let message = transaction.getMessage(id), (message.flags.contains(.Incoming) || (WgramSettings.antiDeleteMessages && !WgramSettings.isAntiDeleteExcluded(peerId: id.peerId))) {
                                                 markMessageAsDeletedLocally(transaction: transaction, id: id)
                                             } else {
                                                 idsToDeleteLocally.append(id)

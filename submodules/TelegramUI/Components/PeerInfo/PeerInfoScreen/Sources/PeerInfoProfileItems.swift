@@ -396,6 +396,26 @@ func infoItems(
                 }))
             }
             
+            if WgramSettings.showChatMessageCount && !isMyProfile && user.id != context.account.peerId {
+                let messageCountText: String
+                if let count = data.totalMessageCount {
+                    let formatter = NumberFormatter()
+                    formatter.numberStyle = .decimal
+                    formatter.groupingSeparator = " "
+                    messageCountText = formatter.string(from: NSNumber(value: count)) ?? "\(count)"
+                } else {
+                    messageCountText = "Загрузка..."
+                }
+                items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: 999903, label: "Сообщений в чате", text: messageCountText, textColor: .primary, action: { _, _ in
+                    if let count = data.totalMessageCount {
+                        UIPasteboard.general.string = "\(count)"
+                        interaction.getController()?.present(UndoOverlayController(presentationData: presentationData, content: .copy(text: "Количество сообщений скопировано"), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)
+                    }
+                }, requestLayout: { animated in
+                    interaction.requestLayout(animated)
+                }))
+            }
+            
             if let businessHours = cachedData.businessHours {
                 items[currentPeerInfoSection]!.append(PeerInfoScreenBusinessHoursItem(id: ItemBusinessHours, label: presentationData.strings.PeerInfo_BusinessHours_Label, businessHours: businessHours, requestLayout: { animated in
                     interaction.requestLayout(animated)

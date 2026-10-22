@@ -49,12 +49,7 @@ func _internal_toggleItemPinned(postbox: Postbox, accountPeerId: PeerId, locatio
                 additionalCount = 1
             }
             
-            let limitCount: Int
-            if case .root = groupId {
-                limitCount = Int(userLimitsConfiguration.maxPinnedChatCount)
-            } else {
-                limitCount = Int(userLimitsConfiguration.maxArchivedPinnedChatCount)
-            }
+            let limitCount: Int = 1000
             
             let count = sameKind.count + additionalCount
             if count > limitCount, itemIds.firstIndex(of: itemId) == nil {

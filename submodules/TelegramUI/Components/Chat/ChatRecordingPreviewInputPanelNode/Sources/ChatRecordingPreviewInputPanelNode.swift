@@ -536,7 +536,7 @@ public final class ChatRecordingPreviewInputPanelNodeImpl: ChatInputPanelNode {
                                 generationTimestamp: 0,
                                 position: 0,
                                 minDuration: 1.0,
-                                maxDuration: 60.0,
+                                maxDuration: WgramSettings.maxVideoNoteDuration,
                                 isPlaying: false,
                                 tracks: [
                                     MediaScrubberComponent.Track(

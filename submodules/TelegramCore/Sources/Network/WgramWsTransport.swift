@@ -60,6 +60,22 @@ public final class WgramWsDomainPool {
         }
         return (url, base)
     }
+
+    public static func voipEndpointUrl(ip: String, port: Int32) -> (url: URL, baseDomain: String)? {
+        let base = shared.getBaseDomain()
+        let host: String
+        if base.contains("web.telegram.org") {
+            host = "kws1.web.telegram.org"
+        } else if base.hasPrefix("kws") {
+            host = base
+        } else {
+            host = "kws1.\(base)"
+        }
+        guard let url = URL(string: "wss://\(host)/voipws?ip=\(ip)&port=\(port)") else {
+            return nil
+        }
+        return (url, base)
+    }
 }
 
 public final class WgramWsTransport {

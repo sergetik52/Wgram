@@ -38,7 +38,8 @@ private final class AccountPresenceManagerImpl {
         self.settingsNotificationObserver = NotificationCenter.default.addObserver(forName: WgramSettings.didChangeNotification, object: nil, queue: nil) { [weak self] _ in
             guard let strongSelf = self else { return }
             strongSelf.queue.async {
-                strongSelf.updatePresence(strongSelf.wasOnline)
+                let targetOnline = WgramSettings.dontUpdateOnline ? false : strongSelf.wasOnline
+                strongSelf.updatePresence(targetOnline)
             }
         }
     }

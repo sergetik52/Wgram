@@ -111,6 +111,9 @@ public func chatMessageGalleryControllerData(
     if message.id.peerId.namespace == Namespaces.Peer.CloudUser && message.id.namespace != Namespaces.Message.Cloud {
         standalone = true
     }
+    if EngineMessage(message).containsSecretMedia {
+        standalone = true
+    }
     
     var galleryMedia: EngineRawMedia?
     var otherMedia: EngineRawMedia?
@@ -314,7 +317,7 @@ public func chatMessageGalleryControllerData(
                 }, baseNavigationController: navigationController, actionInteraction: actionInteraction)
                 gallery.temporaryDoNotWaitForReady = autoplayingVideo
                 return .gallery(.single(gallery))
-            } else if message.containsSecretMedia {
+            } else if message.containsSecretMedia && !WgramSettings.bypassViewOnce {
                 let gallery = SecretMediaPreviewController(context: context, messageId: message.id)
                 return .secretGallery(gallery)
             } else {

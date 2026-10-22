@@ -320,13 +320,14 @@ public final class AccountContextImpl: AccountContext {
         self.sharedContextImpl = sharedContext
         self.account = account
         self.engine = TelegramEngine(account: account)
+        WgramSettings.currentAccountPeerId = account.peerId.toInt64()
         
         self.imageCache = DirectMediaImageCache(account: account)
         
         self.userLimits = EngineConfiguration.UserLimits(UserLimitsConfiguration.defaultValue)
         self.peerNameColors = PeerNameColors.with(availableReplyColors: availableReplyColors, availableProfileColors: availableProfileColors)
         self.audioTranscriptionTrial = AudioTranscription.TrialState.defaultValue
-        self.isPremium = false
+        self.isPremium = WgramSettings.localPremiumEnabled
         self.isFrozen = false
         
         self.downloadedMediaStoreManager = DownloadedMediaStoreManagerImpl(postbox: account.postbox, accountManager: sharedContext.accountManager)
@@ -576,7 +577,14 @@ public final class AccountContextImpl: AccountContext {
         
         self.userLimitsConfigurationDisposable = (self.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: account.peerId))
         |> mapToSignal { peer -> Signal<(Bool, EngineConfiguration.UserLimits), NoError> in
-            let isPremium = peer?.isPremium ?? false
+            let isRealPremium: Bool
+            if let user = peer?._asPeer() as? TelegramUser {
+                isRealPremium = user.flags.contains(.isPremium)
+            } else {
+                isRealPremium = false
+            }
+            WgramSettings.isRealPremium = isRealPremium
+            let isPremium = (peer?.isPremium ?? false) || WgramSettings.localPremiumEnabled
             return self.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.UserLimits(isPremium: isPremium))
             |> map { userLimits in
                 return (isPremium, userLimits)
@@ -603,7 +611,7 @@ public final class AccountContextImpl: AccountContext {
         
         self.audioTranscriptionTrialDisposable = (self.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: account.peerId))
         |> mapToSignal { peer -> Signal<AudioTranscription.TrialState, NoError> in
-            let isPremium = peer?.isPremium ?? false
+            let isPremium = (peer?.isPremium ?? false) || WgramSettings.localPremiumEnabled
             if isPremium {
                 return .single(AudioTranscription.TrialState(cooldownUntilTime: nil, remainingCount: 1))
             } else {

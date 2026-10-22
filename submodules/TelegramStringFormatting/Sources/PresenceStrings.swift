@@ -600,12 +600,7 @@ public func stringAndActivityForUserPresence(strings: PresentationStrings, dateT
                 if dayDifference == 0 || dayDifference == -1 {
                     let day: RelativeTimestampFormatDay
                     if dayDifference == 0 {
-                        if expanded {
-                            day = .today
-                        } else {
-                            let minutes = difference / (60 * 60)
-                            return (strings.LastSeen_HoursAgo(minutes), false)
-                        }
+                        day = .today
                     } else {
                         day = .yesterday
                     }
