@@ -1,116 +1,141 @@
-# Telegram iOS Source Code Compilation Guide
+<div align="center">
 
-We welcome all developers to use our API and source code to create applications on our platform.
-There are several things we require from **all developers** for the moment.
+# ⚡ Wgram for iOS
 
-# Creating your Telegram Application
+**Продвинутый, приватный и бескомпромиссный форк Telegram для iOS**
 
-1. [**Obtain your own api_id**](https://core.telegram.org/api/obtaining_api_id) for your application.
-2. Please **do not** use the name Telegram for your app — or make sure your users understand that it is unofficial.
-3. Kindly **do not** use our standard logo (white paper plane in a blue circle) as your app's logo.
-3. Please study our [**security guidelines**](https://core.telegram.org/mtproto/security_guidelines) and take good care of your users' data and privacy.
-4. Please remember to publish **your** code too in order to comply with the licences.
+[![iOS](https://img.shields.io/badge/iOS-15.0%2B-blue.svg?style=for-the-badge&logo=apple)](https://apple.com)
+[![Swift](https://img.shields.io/badge/Swift-5.9-orange.svg?style=for-the-badge&logo=swift)](https://swift.org)
+[![Bazel](https://img.shields.io/badge/Built_with-Bazel-green.svg?style=for-the-badge&logo=bazel)](https://bazel.build)
+[![License](https://img.shields.io/badge/License-GPLv2-red.svg?style=for-the-badge)](LICENSE)
 
-# Quick Compilation Guide
+*Создан для тех, кому важен полный контроль над приватностью, контентом и общением.*
 
-## Get the Code
+[Возможности](#-основные-возможности) • [Настройки Wgram](#-настройки-wgram-в-приложении) • [Сборка и установка](#-сборка-и-установка) • [Горячие клавиши и фишки](#-удобные-мелочи-qol)
 
+---
+
+</div>
+
+## 🌟 Основные возможности
+
+### 👻 Режим Призрака (Ghost Mode)
+* **Полная невидимость в сети:** приложение блокирует отправку статуса онлайна и keepalive-пакеты MTProto. Вы всегда остаетесь «был(а) недавно» или в оффлайне, даже активно читая переписки.
+* **Скрытное чтение сообщений:** входящие сообщения в личных диалогах, группах и каналах не помечаются прочитанными (две галочки у собеседника не загораются).
+* **Скрытный просмотр историй (Stories):** автор истории никогда не увидит вас в списке просмотров.
+* **Скрытное воспроизведение медиа:** голосовые сообщения и видео-кружочки не помечаются прослушанными.
+* **Скрытие набора текста:** отключение индикаторов «печатает...», «записывает голосовое...», «выбирает фото...».
+* **Чтение при действии (Mark Read After Action):** сообщение автоматически помечается прочитанным для собеседника только тогда, когда вы решите на него ответить или поставить реакцию.
+* **Ghost Send:** безопасная отправка исходящих сообщений с моментальным возвратом в оффлайн-статус без утечки сетевой активности.
+
+---
+
+### 🗑️ Полный Антиделит (Anti-Delete) и История правок
+* **Сохранение удаленных входящих сообщений:** если собеседник удаляет свое сообщение, оно не исчезает из вашего чата, а остается на месте и деликатно помечается значком корзины 🗑️.
+* **Сохранение собственных удаленных сообщений:** если собеседник удаляет переписку «для всех», включая ваши исходящие сообщения — они остаются у вас в чате с отметкой об удалении.
+* **Защита от полного сноса чата:** если собеседник очищает или удаляет весь диалог целиком, локальная история сообщений не теряется.
+* **История редактирования сообщений (Edit History):** при изменении текста собеседником сохраняются все предыдущие версии. Вы можете в любой момент открыть историю правок по долгому тапу на сообщение.
+* **Логирование в отдельный чат:** возможность автоматически дублировать все удаленные и отредактированные сообщения в «Избранное» (Saved Messages) или технический чат.
+
+---
+
+### ⏱️ Длинные видеосообщения и камера
+* **Снятие ограничения в 60 секунд:** записывайте видео-кружочки длительностью 3, 5 или 10 минут одним дублем.
+* **Умная нарезка (Split Long Video Notes):** кружочки длиннее 1 минуты автоматически разделяются на аккуратные непрерывные минутные части без швов и задержек звука.
+* **Выбор камеры по умолчанию:** в настройках можно заранее выбрать, какая камера будет открываться первой при тапе на значок кружочка — **Фронтальная** или **Основная (задняя)**.
+
+---
+
+### 👁️ Обход ограничений контента (Bypass)
+* **Обход таймера самоуничтожения (View-Once):** таймер с одноразовых фото и видео снимается. Медиа можно просматривать сколько угодно раз, увеличивать, делать скриншоты и сохранять в Фотопленку.
+* **Скачивание историй (Stories Downloader):** кнопка прямой загрузки любых историй в галерею устройства в максимальном исходном качестве.
+* **Обход защиты от копирования (Copy Protection Bypass):** свободное копирование текста, пересылка сообщений и сохранение медиа из закрытых каналов и чатов с запретом сохранения.
+
+---
+
+### 🔔 Фоновая работа 24/7 и прямые уведомления
+* **Фоновый Keep-Alive:** поддержание активного соединения с серверами Telegram в фоне 24/7 (даже без официального Apple Developer аккаунта и при закрытом приложении).
+* **Локальные Push-уведомления (Communication Notifications):** мгновенные уведомления о новых сообщениях с аватаром отправителя, возможностью быстрого ответа и интерактивного предпросмотра.
+
+---
+
+### 🛡️ Защита от случайных действий
+* **Подтверждение отправки голосовых сообщений:** модальное окно подтверждения перед отправкой аудио.
+* **Подтверждение отправки видеосообщений:** предотвращает случайную отправку недозаписанных кружочков.
+* **Подтверждение отправки стикеров:** больше никаких случайных стикеров при случайном касании экрана.
+
+---
+
+### ⚡ Удобные мелочи (QoL)
+* **Бесплатная встроенная расшифровка речи:** распознавание голосовых сообщений и кружочков в текст без подписки Telegram Premium.
+* **Быстрый переход в начало диалога (Jump to Beginning):** мгновенная перемотка к первому сообщению в любом чате или канале через меню заголовка.
+* **Дата регистрации аккаунта:** отображение примерной даты создания аккаунта собеседника в профиле на основе алгоритма анализа ID.
+* **ID и Data Center (DC):** точный User ID / Chat ID и номер дата-центра отображаются прямо в профиле пользователя или группы.
+* **Точное время сообщений:** показ секунд в таймстампах сообщений (`ЧЧ:ММ:СС`).
+* **Блокировка рекламы:** скрытие официальных рекламных и спонсорских постов в публичных каналах.
+* **Локальный Premium:** доступ ко всем системным премиум-иконкам приложения, кастомным эмодзи и оформлению.
+* **Фирменный логотип Wgram:** глубокий графитовый фон со стилизованной золотистой литерой **W** в стиле iOS squircle установлен по умолчанию.
+* **Неограниченное количество аккаунтов:** подключайте сколько угодно профилей без лимитов официального клиента.
+
+---
+
+## ⚙️ Настройки Wgram в приложении
+
+Все параметры сгруппированы в удобном меню: **Настройки ➔ Настройки Wgram**:
+
+| Раздел | Доступные параметры |
+| :--- | :--- |
+| **Режим Призрака** | Главный переключатель, Скрывать «В сети», Не читать сообщения, Не читать истории, Не слушать медиа, Не отправлять набор текста, Читать при действии, Ghost Send |
+| **Антиделит и История** | Входящий антиделит, Сохранение своих сообщений, Сохранение при очистке чата, История редактирования, Исключения для чатов, Логирование в Избранное |
+| **Кружочки и Видео** | Лимит длительности (1, 3, 5, 10 мин), Авто-разделение на части по 60 сек, Начальная камера (фронтальная / задняя) |
+| **Медиа и Обход** | Обход таймера View-Once, Сохранение защищенного контента, Загрузка Stories в галерею |
+| **Подтверждения** | Подтверждение аудио, Подтверждение видеосообщений, Подтверждение стикеров |
+| **Интерфейс и Инфо** | Показ ID и DC, Точные секунды сообщений, Счетчик сообщений, Дата регистрации, Переход в начало |
+| **Фон и Сеть** | Фоновый Keep-Alive 24/7, Локальные Push-уведомления, WebSocket прокси-туннель |
+
+---
+
+## 🛠️ Сборка и установка
+
+### Системные требования
+* macOS 14+ (Apple Silicon или Intel)
+* Xcode 15+ с установленными Command Line Tools
+* Python 3.10+
+* Базовые утилиты: `git`, `bazel` (загружается автоматически через сборочный скрипт)
+
+### 1. Клонирование репозитория
+```bash
+git clone --recursive https://github.com/sergetik52/Wgram.git
+cd Wgram
 ```
-git clone --recursive -j8 https://github.com/TelegramMessenger/Telegram-iOS.git
+
+### 2. Настройка конфигурации сборки
+Сгенерируйте файл параметров или используйте файл разработчика:
+```bash
+cp build-system/template_minimal_development_configuration.json build-system/development_configuration.json
 ```
+*(При необходимости укажите ваш Team ID и Bundle ID в файле конфигурации).*
 
-## Setup Xcode
-
-Install Xcode (directly from https://developer.apple.com/download/applications or using the App Store).
-
-## Adjust Configuration
-
-1. Generate a random identifier:
+### 3. Быстрая сборка и установка на подключенный iPhone
+В репозиторий включен автоматический скрипт сборки и развертывания:
+```bash
+bash scripts/deploy_build.sh
 ```
-openssl rand -hex 8
-```
-2. Create a new Xcode project. Use `Telegram` as the Product Name. Use `org.{identifier from step 1}` as the Organization Identifier.
-3. Open `Keychain Access` and navigate to `Certificates`. Locate `Apple Development: your@email.address (XXXXXXXXXX)` and double tap the certificate. Under `Details`, locate `Organizational Unit`. This is the Team ID.
-4. Edit `build-system/template_minimal_development_configuration.json`. Use data from the previous steps.
+Скрипт выполнит:
+1. Инкрементальную компиляцию артефактов через Bazel (`debug_arm64`).
+2. Упаковку итогового `Wgram.ipa` и сохранение на Рабочий стол (`~/Desktop/Wgram.ipa`).
+3. Прямую установку и запуск приложения на подключенном iPhone через `xcrun devicectl`.
 
-## Generate an Xcode project
+---
 
-```
-python3 build-system/Make/Make.py \
-    --cacheDir="$HOME/telegram-bazel-cache" \
-    generateProject \
-    --configurationPath=build-system/template_minimal_development_configuration.json \
-    --xcodeManagedCodesigning
-```
+## ⚖️ Дисклеймер и безопасность
 
-# Advanced Compilation Guide
+* Wgram является неофициальной модификацией Telegram для iOS и распространяется на условиях свободной лицензии **GNU General Public License v2.0**.
+* Приложение взаимодействует с официальными серверами Telegram по протоколу MTProto без посредников. Ваши учетные данные, сессии и ключи сквозного шифрования (E2E) никогда не передаются третьим лицам.
+* Проект не аффилирован с Telegram FZ-LLC или Telegram Messenger Inc.
 
-## Xcode
+---
 
-1. Copy and edit `build-system/appstore-configuration.json`.
-2. Copy `build-system/fake-codesigning`. Create and download provisioning profiles, using the `profiles` folder as a reference for the entitlements.
-3. Generate an Xcode project:
-```
-python3 build-system/Make/Make.py \
-    --cacheDir="$HOME/telegram-bazel-cache" \
-    generateProject \
-    --configurationPath=configuration_from_step_1.json \
-    --codesigningInformationPath=directory_from_step_2
-```
-
-## IPA
-
-1. Repeat the steps from the previous section. Use distribution provisioning profiles.
-2. Run:
-```
-python3 build-system/Make/Make.py \
-    --cacheDir="$HOME/telegram-bazel-cache" \
-    build \
-    --configurationPath=...see previous section... \
-    --codesigningInformationPath=...see previous section... \
-    --buildNumber=100001 \
-    --configuration=release_arm64
-```
-
-# FAQ
-
-## Xcode is stuck at "build-request.json not updated yet"
-
-Occasionally, you might observe the following message in your build log:
-```
-"/Users/xxx/Library/Developer/Xcode/DerivedData/Telegram-xxx/Build/Intermediates.noindex/XCBuildData/xxx.xcbuilddata/build-request.json" not updated yet, waiting...
-```
-
-Should this occur, simply cancel the ongoing build and initiate a new one.
-
-## Telegram_xcodeproj: no such package 
-
-Following a system restart, the auto-generated Xcode project might encounter a build failure accompanied by this error:
-```
-ERROR: Skipping '@rules_xcodeproj_generated//generator/Telegram/Telegram_xcodeproj:Telegram_xcodeproj': no such package '@rules_xcodeproj_generated//generator/Telegram/Telegram_xcodeproj': BUILD file not found in directory 'generator/Telegram/Telegram_xcodeproj' of external repository @rules_xcodeproj_generated. Add a BUILD file to a directory to mark it as a package.
-```
-
-If you encounter this issue, re-run the project generation steps in the README.
-
-
-# Tips
-
-## Codesigning is not required for simulator-only builds
-
-Add `--disableProvisioningProfiles`:
-```
-python3 build-system/Make/Make.py \
-    --cacheDir="$HOME/telegram-bazel-cache" \
-    generateProject \
-    --configurationPath=path-to-configuration.json \
-    --codesigningInformationPath=path-to-provisioning-data \
-    --disableProvisioningProfiles
-```
-
-## Versions
-
-Each release is built using a specific Xcode version (see `versions.json`). The helper script checks the versions of the installed software and reports an error if they don't match the ones specified in `versions.json`. It is possible to bypass these checks:
-
-```
-python3 build-system/Make/Make.py --overrideXcodeVersion build ... # Don't check the version of Xcode
-```
+<div align="center">
+<b>Wgram</b> — бескомпромиссная свобода общения на iOS.
+</div>
