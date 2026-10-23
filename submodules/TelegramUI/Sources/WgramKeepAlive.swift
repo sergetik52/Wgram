@@ -57,7 +57,7 @@ public final class WgramKeepAlive: NSObject, AVAudioPlayerDelegate, CLLocationMa
         NotificationCenter.default.addObserver(self, selector: #selector(self.handleEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
         
         NotificationCenter.default.addObserver(forName: NSNotification.Name("WgramTestKeepAliveNotification"), object: nil, queue: .main) { _ in
-            WgramKeepAlive.scheduleTestNotification(delaySeconds: 10.0) {}
+            WgramLocalNotifications.scheduleTestNotifications(delaySeconds: 10.0) {}
         }
     }
     

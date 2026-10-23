@@ -272,24 +272,21 @@ public final class WgramLocalNotifications {
     }
     
     private static func getAvatarImageFile(context: AccountContext, peer: EnginePeer) -> (inImage: INImage?, fileUrl: URL?) {
-        let size = CGSize(width: 100.0, height: 100.0)
+        let size = CGSize(width: 120.0, height: 120.0)
         var avatarUIImage: UIImage?
         
         var targetResource: MediaResource?
-        if let resource = peer.smallProfileImage?.resource {
+        if let rep = smallestImageRepresentation(peer._asPeer().profileImageRepresentations) {
+            targetResource = rep.resource
+        } else if let resource = peer.smallProfileImage?.resource {
             targetResource = resource
         } else if let resource = peer.largeProfileImage?.resource {
             targetResource = resource
-        } else {
-            for rep in peer._asPeer().profileImageRepresentations {
-                targetResource = rep.resource
-                break
-            }
         }
         
         if let resource = targetResource {
-            if let path = context.account.postbox.mediaBox.completedResourcePath(resource),
-               let rawImage = UIImage(contentsOfFile: path) {
+            let imagePath: String? = context.account.postbox.mediaBox.completedResourcePath(resource)
+            if let path = imagePath, let rawImage = UIImage(contentsOfFile: path) {
                 let renderer = UIGraphicsImageRenderer(size: size)
                 avatarUIImage = renderer.image { _ in
                     let rect = CGRect(origin: .zero, size: size)
@@ -318,7 +315,7 @@ public final class WgramLocalNotifications {
         }
         
         if avatarUIImage == nil {
-            let avatarFont = avatarPlaceholderFont(size: 42.0)
+            let avatarFont = avatarPlaceholderFont(size: 48.0)
             avatarUIImage = generateImage(size, rotatedContext: { size, ctx in
                 ctx.clear(CGRect(origin: .zero, size: size))
                 drawPeerAvatarLetters(
@@ -333,22 +330,172 @@ public final class WgramLocalNotifications {
             })
         }
         
-        guard let uiImage = avatarUIImage, let data = uiImage.jpegData(compressionQuality: 0.9) else { return (nil, nil) }
+        guard let uiImage = avatarUIImage, let data = uiImage.pngData() else { return (nil, nil) }
         
         let tempDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("wgram-avatars", isDirectory: true)
         let _ = try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
-        let fileUrl = tempDir.appendingPathComponent("\(peer.id.toInt64()).jpg")
+        let fileUrl = tempDir.appendingPathComponent("\(peer.id.toInt64()).png")
+        let _ = try? data.write(to: fileUrl, options: .atomic)
         
-        do {
-            try data.write(to: fileUrl, options: .atomic)
-            if #available(iOS 15.0, *) {
-                return (INImage(url: fileUrl), fileUrl)
-            } else {
-                return (nil, fileUrl)
-            }
-        } catch {
-            return (nil, nil)
+        if #available(iOS 15.0, *) {
+            return (INImage(imageData: data), fileUrl)
+        } else {
+            return (nil, fileUrl)
         }
+    }
+    
+    public static func generateTestAvatar(text: String, color1: UInt32, color2: UInt32) -> (INImage?, URL?) {
+        let size = CGSize(width: 120.0, height: 120.0)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let image = renderer.image { ctx in
+            let rect = CGRect(origin: .zero, size: size)
+            UIBezierPath(ovalIn: rect).addClip()
+            
+            let colorSpace = CGColorSpaceCreateDeviceRGB()
+            let colors = [UIColor(rgb: color1).cgColor, UIColor(rgb: color2).cgColor] as CFArray
+            var locations: [CGFloat] = [0.0, 1.0]
+            if let gradient = CGGradient(colorsSpace: colorSpace, colors: colors, locations: &locations) {
+                ctx.cgContext.drawLinearGradient(gradient, start: CGPoint(x: 0, y: 0), end: CGPoint(x: 0, y: size.height), options: [])
+            }
+            
+            let font = UIFont.systemFont(ofSize: 52.0, weight: .bold)
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: UIColor.white
+            ]
+            let attrStr = NSAttributedString(string: text, attributes: attrs)
+            let textSize = attrStr.size()
+            let textOrigin = CGPoint(x: (size.width - textSize.width) / 2.0, y: (size.height - textSize.height) / 2.0)
+            attrStr.draw(at: textOrigin)
+        }
+        
+        guard let data = image.pngData() else { return (nil, nil) }
+        let tempDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("wgram-avatars", isDirectory: true)
+        let _ = try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
+        let fileUrl = tempDir.appendingPathComponent("test_\(color1).png")
+        let _ = try? data.write(to: fileUrl, options: .atomic)
+        
+        if #available(iOS 15.0, *) {
+            return (INImage(imageData: data), fileUrl)
+        } else {
+            return (nil, fileUrl)
+        }
+    }
+    
+    public static func scheduleTestNotifications(delaySeconds: Double = 10.0, completion: @escaping () -> Void) {
+        let (alexAvatar, alexUrl) = self.generateTestAvatar(text: "А", color1: 0x34C76F, color2: 0x2A9DF4)
+        let (chanAvatar, chanUrl) = self.generateTestAvatar(text: "W", color1: 0x8E2DE2, color2: 0x4A00E0)
+        
+        func createTestNotification(senderName: String, body: String, threadId: String, avatar: INImage?, fileUrl: URL?, triggerDelay: Double, identifier: String) {
+            let content = UNMutableNotificationContent()
+            content.title = senderName
+            content.body = body
+            content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "0.m4a"))
+            content.threadIdentifier = threadId
+            content.categoryIdentifier = "r"
+            
+            if let fileUrl = fileUrl, let attachment = try? UNNotificationAttachment(identifier: "att_\(identifier)", url: fileUrl, options: nil) {
+                content.attachments = [attachment]
+            }
+            
+            var finalContent: UNNotificationContent = content
+            if #available(iOS 15.0, *) {
+                var personNameComponents = PersonNameComponents()
+                personNameComponents.nickname = senderName
+                
+                let senderPerson = INPerson(
+                    personHandle: INPersonHandle(value: threadId, type: .unknown),
+                    nameComponents: personNameComponents,
+                    displayName: senderName,
+                    image: avatar,
+                    contactIdentifier: nil,
+                    customIdentifier: threadId,
+                    isMe: false,
+                    suggestionType: .none
+                )
+                
+                let mePerson = INPerson(
+                    personHandle: INPersonHandle(value: "0", type: .unknown),
+                    nameComponents: nil,
+                    displayName: nil,
+                    image: nil,
+                    contactIdentifier: nil,
+                    customIdentifier: nil,
+                    isMe: true,
+                    suggestionType: .none
+                )
+                
+                let intent = INSendMessageIntent(
+                    recipients: [mePerson],
+                    outgoingMessageType: .outgoingMessageText,
+                    content: body,
+                    speakableGroupName: nil,
+                    conversationIdentifier: threadId,
+                    serviceName: nil,
+                    sender: senderPerson,
+                    attachments: nil
+                )
+                if let avatar = avatar {
+                    intent.setImage(avatar, forParameterNamed: \.sender)
+                }
+                
+                let interaction = INInteraction(intent: intent, response: nil)
+                interaction.direction = .incoming
+                interaction.donate(completion: nil)
+                
+                do {
+                    let updated = try content.updating(from: intent)
+                    if let mutable = updated.mutableCopy() as? UNMutableNotificationContent {
+                        mutable.threadIdentifier = threadId
+                        if mutable.attachments.isEmpty && !content.attachments.isEmpty {
+                            mutable.attachments = content.attachments
+                        }
+                        finalContent = mutable
+                    }
+                } catch {
+                    finalContent = content
+                }
+            }
+            
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: triggerDelay, repeats: false)
+            let request = UNNotificationRequest(identifier: identifier, content: finalContent, trigger: trigger)
+            UNUserNotificationCenter.current().add(request)
+        }
+        
+        // 1. Friend 1 (Stack 1)
+        createTestNotification(
+            senderName: "Алексей (Друг 1)",
+            body: "Привет! Проверяем аватарку и разделение на стопки в Wgram 🔥",
+            threadId: "wgram_test_stack_friend1",
+            avatar: alexAvatar,
+            fileUrl: alexUrl,
+            triggerDelay: delaySeconds,
+            identifier: "wgram_test_1_\(UUID().uuidString)"
+        )
+        
+        // 2. Channel (Stack 2)
+        createTestNotification(
+            senderName: "Wgram News",
+            body: "Это сообщение от канала в ОТДЕЛЬНОЙ стопке! 🚀",
+            threadId: "wgram_test_stack_channel",
+            avatar: chanAvatar,
+            fileUrl: chanUrl,
+            triggerDelay: delaySeconds + 1.0,
+            identifier: "wgram_test_2_\(UUID().uuidString)"
+        )
+        
+        // 3. Friend 1 again (Stack 1)
+        createTestNotification(
+            senderName: "Алексей (Друг 1)",
+            body: "Второе сообщение упало в стопку к первому! Собеседники разделены 👍",
+            threadId: "wgram_test_stack_friend1",
+            avatar: alexAvatar,
+            fileUrl: alexUrl,
+            triggerDelay: delaySeconds + 2.0,
+            identifier: "wgram_test_3_\(UUID().uuidString)"
+        )
+        
+        completion()
     }
     
     private static func resolveSound(context: AccountContext, fileId: Int64, soundResource: MediaResource?) -> String {

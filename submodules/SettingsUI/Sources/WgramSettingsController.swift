@@ -1000,7 +1000,7 @@ public func wgramSettingsController(context: AccountContext) -> ViewController {
             NotificationCenter.default.post(name: NSNotification.Name("WgramTestKeepAliveNotification"), object: nil)
             let alert = UIAlertController(
                 title: "⚡ Тест запущен",
-                message: "Сверните Telegram или заблокируйте экран прямо сейчас.\nРовно через 10 секунд на экран придёт пуш-уведомление.",
+                message: "Сверните Wgram или заблокируйте экран прямо сейчас.\nЧерез 10 секунд на экран придут 3 пуша с круглыми аватарками, разделенные по стопкам собеседников!",
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: "Понятно", style: .default))
