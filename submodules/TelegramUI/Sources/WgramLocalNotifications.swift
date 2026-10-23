@@ -188,85 +188,13 @@ public final class WgramLocalNotifications {
             }
             content.threadIdentifier = threadIdentifier
             
-            let (avatarImage, avatarFileUrl) = self.getAvatarImageFile(context: context, peer: effectiveSenderPeer)
+            let (_, avatarFileUrl) = self.getAvatarImageFile(context: context, peer: effectiveSenderPeer)
             if let avatarFileUrl = avatarFileUrl, let attachment = try? UNNotificationAttachment(identifier: "avatar_\(firstMessage.id.peerId.toInt64())", url: avatarFileUrl, options: nil) {
                 content.attachments = [attachment]
             }
             
-            var finalContent: UNNotificationContent = content
-            
-            // 8. Communication Notification with Contact Avatar (iOS 15+)
-            if #available(iOS 15.0, *) {
-                var personNameComponents = PersonNameComponents()
-                if let user = effectiveSenderPeer._asPeer() as? TelegramUser {
-                    personNameComponents.givenName = user.firstName
-                    personNameComponents.familyName = user.lastName
-                } else {
-                    personNameComponents.nickname = senderName
-                }
-                
-                let senderPerson = INPerson(
-                    personHandle: INPersonHandle(value: "\(effectiveSenderPeer.id.toInt64())", type: .unknown),
-                    nameComponents: personNameComponents,
-                    displayName: senderName,
-                    image: avatarImage,
-                    contactIdentifier: nil,
-                    customIdentifier: "\(effectiveSenderPeer.id.toInt64())",
-                    isMe: false,
-                    suggestionType: .none
-                )
-                
-                let mePerson = INPerson(
-                    personHandle: INPersonHandle(value: "0", type: .unknown),
-                    nameComponents: nil,
-                    displayName: nil,
-                    image: nil,
-                    contactIdentifier: nil,
-                    customIdentifier: nil,
-                    isMe: true,
-                    suggestionType: .none
-                )
-                
-                let speakableGroup: INSpeakableString? = (isGroup && groupTitle != nil) ? INSpeakableString(spokenPhrase: groupTitle!) : nil
-                let conversationId = "\(firstMessage.id.peerId.toInt64())"
-                
-                let intent = INSendMessageIntent(
-                    recipients: [mePerson],
-                    outgoingMessageType: .outgoingMessageText,
-                    content: body,
-                    speakableGroupName: speakableGroup,
-                    conversationIdentifier: conversationId,
-                    serviceName: nil,
-                    sender: senderPerson,
-                    attachments: nil
-                )
-                if let avatarImage = avatarImage {
-                    intent.setImage(avatarImage, forParameterNamed: \.sender)
-                }
-                
-                let interaction = INInteraction(intent: intent, response: nil)
-                interaction.direction = .incoming
-                interaction.donate(completion: nil)
-                
-                var finalMutable: UNMutableNotificationContent
-                do {
-                    let updated = try content.updating(from: intent)
-                    finalMutable = (updated.mutableCopy() as? UNMutableNotificationContent) ?? content
-                } catch {
-                    finalMutable = content
-                }
-                if finalMutable.body.isEmpty && !body.isEmpty {
-                    finalMutable.body = body
-                }
-                finalMutable.threadIdentifier = threadIdentifier
-                if finalMutable.attachments.isEmpty && !content.attachments.isEmpty {
-                    finalMutable.attachments = content.attachments
-                }
-                finalContent = finalMutable
-            }
-            
             let identifier = "wgram_msg_\(firstMessage.id.peerId.toInt64())_\(firstMessage.id.id)"
-            let request = UNNotificationRequest(identifier: identifier, content: finalContent, trigger: nil)
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
             UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
         })
     }
@@ -383,10 +311,10 @@ public final class WgramLocalNotifications {
     }
     
     public static func scheduleTestNotifications(delaySeconds: Double = 10.0, completion: @escaping () -> Void) {
-        let (alexAvatar, alexUrl) = self.generateTestAvatar(text: "А", color1: 0x34C76F, color2: 0x2A9DF4)
-        let (chanAvatar, chanUrl) = self.generateTestAvatar(text: "W", color1: 0x8E2DE2, color2: 0x4A00E0)
+        let (_, alexUrl) = self.generateTestAvatar(text: "А", color1: 0x34C76F, color2: 0x2A9DF4)
+        let (_, chanUrl) = self.generateTestAvatar(text: "W", color1: 0x8E2DE2, color2: 0x4A00E0)
         
-        func createTestNotification(senderName: String, body: String, threadId: String, avatar: INImage?, fileUrl: URL?, triggerDelay: Double, identifier: String) {
+        func createTestNotification(senderName: String, body: String, threadId: String, fileUrl: URL?, triggerDelay: Double, identifier: String) {
             let content = UNMutableNotificationContent()
             content.title = senderName
             content.body = body
@@ -398,67 +326,8 @@ public final class WgramLocalNotifications {
                 content.attachments = [attachment]
             }
             
-            var finalContent: UNNotificationContent = content
-            if #available(iOS 15.0, *) {
-                var personNameComponents = PersonNameComponents()
-                personNameComponents.nickname = senderName
-                
-                let senderPerson = INPerson(
-                    personHandle: INPersonHandle(value: threadId, type: .unknown),
-                    nameComponents: personNameComponents,
-                    displayName: senderName,
-                    image: avatar,
-                    contactIdentifier: nil,
-                    customIdentifier: threadId,
-                    isMe: false,
-                    suggestionType: .none
-                )
-                
-                let mePerson = INPerson(
-                    personHandle: INPersonHandle(value: "0", type: .unknown),
-                    nameComponents: nil,
-                    displayName: nil,
-                    image: nil,
-                    contactIdentifier: nil,
-                    customIdentifier: nil,
-                    isMe: true,
-                    suggestionType: .none
-                )
-                
-                let intent = INSendMessageIntent(
-                    recipients: [mePerson],
-                    outgoingMessageType: .outgoingMessageText,
-                    content: body,
-                    speakableGroupName: nil,
-                    conversationIdentifier: threadId,
-                    serviceName: nil,
-                    sender: senderPerson,
-                    attachments: nil
-                )
-                if let avatar = avatar {
-                    intent.setImage(avatar, forParameterNamed: \.sender)
-                }
-                
-                let interaction = INInteraction(intent: intent, response: nil)
-                interaction.direction = .incoming
-                interaction.donate(completion: nil)
-                
-                do {
-                    let updated = try content.updating(from: intent)
-                    if let mutable = updated.mutableCopy() as? UNMutableNotificationContent {
-                        mutable.threadIdentifier = threadId
-                        if mutable.attachments.isEmpty && !content.attachments.isEmpty {
-                            mutable.attachments = content.attachments
-                        }
-                        finalContent = mutable
-                    }
-                } catch {
-                    finalContent = content
-                }
-            }
-            
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: triggerDelay, repeats: false)
-            let request = UNNotificationRequest(identifier: identifier, content: finalContent, trigger: trigger)
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
             UNUserNotificationCenter.current().add(request)
         }
         
@@ -467,7 +336,6 @@ public final class WgramLocalNotifications {
             senderName: "Алексей (Друг 1)",
             body: "Привет! Проверяем аватарку и разделение на стопки в Wgram 🔥",
             threadId: "wgram_test_stack_friend1",
-            avatar: alexAvatar,
             fileUrl: alexUrl,
             triggerDelay: delaySeconds,
             identifier: "wgram_test_1_\(UUID().uuidString)"
@@ -478,7 +346,6 @@ public final class WgramLocalNotifications {
             senderName: "Wgram News",
             body: "Это сообщение от канала в ОТДЕЛЬНОЙ стопке! 🚀",
             threadId: "wgram_test_stack_channel",
-            avatar: chanAvatar,
             fileUrl: chanUrl,
             triggerDelay: delaySeconds + 1.0,
             identifier: "wgram_test_2_\(UUID().uuidString)"
@@ -489,7 +356,6 @@ public final class WgramLocalNotifications {
             senderName: "Алексей (Друг 1)",
             body: "Второе сообщение упало в стопку к первому! Собеседники разделены 👍",
             threadId: "wgram_test_stack_friend1",
-            avatar: alexAvatar,
             fileUrl: alexUrl,
             triggerDelay: delaySeconds + 2.0,
             identifier: "wgram_test_3_\(UUID().uuidString)"
