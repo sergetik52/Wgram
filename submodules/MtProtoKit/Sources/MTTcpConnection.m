@@ -900,6 +900,8 @@ struct ctr_state {
         _encryptionProvider = context.encryptionProvider;
         
         _scheme = scheme;
+        _datacenterId = datacenterId;
+        _isMedia = scheme.media;
         
         _interface = interface;
         _usageCalculationInfo = usageCalculationInfo;

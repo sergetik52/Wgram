@@ -180,12 +180,23 @@ public final class WgramLocalNotifications {
             }
             content.userInfo = userInfo
             
+            let threadIdentifier: String
+            if threadData != nil, let threadId = firstMessage.threadId, !isBroadcastChannel {
+                threadIdentifier = "wgram_peer_\(firstMessage.id.peerId.toInt64())_\(threadId)"
+            } else {
+                threadIdentifier = "wgram_peer_\(firstMessage.id.peerId.toInt64())"
+            }
+            content.threadIdentifier = threadIdentifier
+            
+            let (avatarImage, avatarFileUrl) = self.getAvatarImageFile(context: context, peer: effectiveSenderPeer)
+            if let avatarFileUrl = avatarFileUrl, let attachment = try? UNNotificationAttachment(identifier: "avatar_\(firstMessage.id.peerId.toInt64())", url: avatarFileUrl, options: nil) {
+                content.attachments = [attachment]
+            }
+            
             var finalContent: UNNotificationContent = content
             
             // 8. Communication Notification with Contact Avatar (iOS 15+)
             if #available(iOS 15.0, *) {
-                let avatarImage = self.getAvatarImage(context: context, peer: effectiveSenderPeer)
-                
                 var personNameComponents = PersonNameComponents()
                 if let user = effectiveSenderPeer._asPeer() as? TelegramUser {
                     personNameComponents.givenName = user.firstName
@@ -237,18 +248,21 @@ public final class WgramLocalNotifications {
                 interaction.direction = .incoming
                 interaction.donate(completion: nil)
                 
+                var finalMutable: UNMutableNotificationContent
                 do {
                     let updated = try content.updating(from: intent)
-                    if updated.body.isEmpty && !body.isEmpty {
-                        let mutable = updated.mutableCopy() as? UNMutableNotificationContent ?? content
-                        mutable.body = body
-                        finalContent = mutable
-                    } else {
-                        finalContent = updated
-                    }
+                    finalMutable = (updated.mutableCopy() as? UNMutableNotificationContent) ?? content
                 } catch {
-                    print("[Wgram] updating(from: intent) error: \(error)")
+                    finalMutable = content
                 }
+                if finalMutable.body.isEmpty && !body.isEmpty {
+                    finalMutable.body = body
+                }
+                finalMutable.threadIdentifier = threadIdentifier
+                if finalMutable.attachments.isEmpty && !content.attachments.isEmpty {
+                    finalMutable.attachments = content.attachments
+                }
+                finalContent = finalMutable
             }
             
             let identifier = "wgram_msg_\(firstMessage.id.peerId.toInt64())_\(firstMessage.id.id)"
@@ -257,11 +271,23 @@ public final class WgramLocalNotifications {
         })
     }
     
-    private static func getAvatarImage(context: AccountContext, peer: EnginePeer) -> INImage? {
+    private static func getAvatarImageFile(context: AccountContext, peer: EnginePeer) -> (inImage: INImage?, fileUrl: URL?) {
         let size = CGSize(width: 100.0, height: 100.0)
         var avatarUIImage: UIImage?
         
+        var targetResource: MediaResource?
         if let resource = peer.smallProfileImage?.resource {
+            targetResource = resource
+        } else if let resource = peer.largeProfileImage?.resource {
+            targetResource = resource
+        } else {
+            for rep in peer._asPeer().profileImageRepresentations {
+                targetResource = rep.resource
+                break
+            }
+        }
+        
+        if let resource = targetResource {
             if let path = context.account.postbox.mediaBox.completedResourcePath(resource),
                let rawImage = UIImage(contentsOfFile: path) {
                 let renderer = UIGraphicsImageRenderer(size: size)
@@ -307,7 +333,7 @@ public final class WgramLocalNotifications {
             })
         }
         
-        guard let uiImage = avatarUIImage, let data = uiImage.jpegData(compressionQuality: 0.9) else { return nil }
+        guard let uiImage = avatarUIImage, let data = uiImage.jpegData(compressionQuality: 0.9) else { return (nil, nil) }
         
         let tempDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("wgram-avatars", isDirectory: true)
         let _ = try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
@@ -315,9 +341,13 @@ public final class WgramLocalNotifications {
         
         do {
             try data.write(to: fileUrl, options: .atomic)
-            return INImage(url: fileUrl)
+            if #available(iOS 15.0, *) {
+                return (INImage(url: fileUrl), fileUrl)
+            } else {
+                return (nil, fileUrl)
+            }
         } catch {
-            return nil
+            return (nil, nil)
         }
     }
     

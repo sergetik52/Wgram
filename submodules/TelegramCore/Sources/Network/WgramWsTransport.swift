@@ -46,7 +46,7 @@ public final class WgramWsDomainPool {
 
     public static func endpointUrl(dc: Int, isMedia: Bool = false) -> (url: URL, baseDomain: String)? {
         let base = shared.getBaseDomain()
-        let prefix = isMedia ? "kws\(dc)-1" : "kws\(dc)"
+        let prefix = "kws\(dc)"
         let host: String
         if base.contains("web.telegram.org") {
             host = "\(prefix).web.telegram.org"
@@ -134,7 +134,8 @@ private final class WgramWsConnection: NSObject, MTTcpConnectionInterface, URLSe
             let config = URLSessionConfiguration.default
             config.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
             config.urlCache = nil
-            config.timeoutIntervalForRequest = 20.0
+            config.httpMaximumConnectionsPerHost = 16
+            config.timeoutIntervalForRequest = 30.0
             config.timeoutIntervalForResource = 86400.0
 
             let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
@@ -150,11 +151,15 @@ private final class WgramWsConnection: NSObject, MTTcpConnectionInterface, URLSe
     }
 
     private func resolveDatacenterId(from host: String) -> Int {
-        if host.contains("149.154.175.5") || host.contains("149.154.175.10") { return 1 }
-        if host.contains("149.154.167.5") || host.contains("95.161.76.100") || host.contains("149.154.167.40") { return 2 }
-        if host.contains("149.154.175.100") || host.contains("149.154.175.117") { return 3 }
-        if host.contains("149.154.167.9") { return 4 }
-        if host.contains("149.154.171.5") { return 5 }
+        if let tcpConn = self.delegate as? NSObject,
+           let dcVal = tcpConn.value(forKey: "datacenterId") as? Int, dcVal >= 1 && dcVal <= 5 {
+            return dcVal
+        }
+        if host.contains("149.154.175.5") || host.contains("149.154.175.10") || host.contains("2001:b28:f23d:f001") { return 1 }
+        if host.contains("149.154.167.5") || host.contains("95.161.76.") || host.contains("149.154.167.4") || host.contains("91.108.56.") || host.contains("91.108.16.") || host.contains("2001:67c:4e8:f002") { return 2 }
+        if host.contains("149.154.175.100") || host.contains("149.154.175.117") || host.contains("91.108.4.") || host.contains("2001:b28:f23d:f003") { return 3 }
+        if host.contains("149.154.167.9") || host.contains("91.108.8.") || host.contains("91.108.12.") || host.contains("2001:67c:4e8:f004") { return 4 }
+        if host.contains("149.154.171.5") || host.contains("91.108.56.") || host.contains("2001:b28:f23f:f005") { return 5 }
         return 2
     }
 

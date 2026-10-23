@@ -344,27 +344,27 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
                 arguments.toggleDontReadMessages(value)
             })
         case let .dontSendTyping(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.emoji, title: "Не отправлять «печатает...»", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.emoji, title: "Скрывать набор текста", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleDontSendTyping(value)
             })
         case let .dontUpdateOnline(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.activeSessions, title: "Скрывать статус «В сети»", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.activeSessions, title: "Скрывать онлайн", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleDontUpdateOnline(value)
             })
         case let .dontReadStories(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.stories, title: "Невидимый просмотр историй", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.stories, title: "Скрывать Stories", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleDontReadStories(value)
             })
         case let .dontReadMedia(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.videos, title: "Не отмечать прослушивание аудио", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.videos, title: "Скрывать прослушивание", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleDontReadMedia(value)
             })
         case let .ghostSend(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.timer, title: "Ghost Send (Отправка без онлайна)", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.timer, title: "Ghost Send (без сети)", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleGhostSend(value)
             })
         case let .markReadAfterAction(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.recentCalls, title: "Читать чат при ответе", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.recentCalls, title: "Читать при ответе", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleMarkReadAfterAction(value)
             })
         case .detailsFooter:
@@ -377,7 +377,7 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
                 arguments.toggleLocalPremium(value)
             })
         case let .localPremiumCustomEmoji(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.stickers, title: "AyuGram кастомные эмодзи", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.stickers, title: "Кастомные эмодзи", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleLocalPremiumCustomEmoji(value)
             })
         case .localPremiumFooter:
@@ -386,7 +386,7 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
         case .tgWsProxyHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "TG WS ПРОКСИ (ОБХОД БЛОКИРОВОК)", sectionId: self.section)
         case let .tgWsProxyMaster(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.proxy, title: "Включить TG WS Прокси", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.proxy, title: "TG WS Прокси", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleTgWsProxy(value)
             })
         case let .tgWsDomainSelector(domain):
@@ -394,11 +394,11 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
                 arguments.selectTgWsDomain()
             })
         case let .tgWsAutoFallback(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.cellular, title: "Авто-переключение зеркал", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.cellular, title: "Авто-зеркала", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleTgWsAutoFallback(value)
             })
         case let .tgWsCallsBridge(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.calls, title: "Звонки через ТГВС", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.calls, title: "Звонки через WS", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleTgWsCallsBridge(value)
             })
         case .tgWsProxyFooter:
@@ -407,15 +407,15 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
         case .copyProtectionHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ЗАПРЕТЫ И ОГРАНИЧЕНИЯ", sectionId: self.section)
         case let .bypassCopyProtection(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.lockOrange, title: "Снять запрет копирования (No-Forward)", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.lockOrange, title: "Обход копирования", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleBypassCopyProtection(value)
             })
         case let .bypassViewOnce(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.photos, title: "Обход таймера (View-Once)", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.photos, title: "Обход View-Once", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleBypassViewOnce(value)
             })
         case let .hideSponsoredMessages(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.block, title: "Скрывать рекламу (No Ads)", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.block, title: "Скрывать рекламу", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleHideSponsoredMessages(value)
             })
         case .copyProtectionFooter:
@@ -424,11 +424,11 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
         case .confirmationsHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ПОДТВЕРЖДЕНИЕ ОТПРАВКИ", sectionId: self.section)
         case let .confirmVoiceSend(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.notifications, title: "Предпросмотр голосовых", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.notifications, title: "Проверка войсов", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleConfirmVoiceSend(value)
             })
         case let .confirmVideoSend(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.videosBlue, title: "Предпросмотр кружочков", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.videosBlue, title: "Проверка кружочков", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleConfirmVideoSend(value)
             })
         case let .confirmStickerSend(value):
@@ -441,11 +441,11 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
         case .historyHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ИСТОРИЯ И АНТИ-УДАЛЕНИЕ", sectionId: self.section)
         case let .antiDelete(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.chatFolders, title: "Сохранять удалённые сообщения", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.chatFolders, title: "Сохранять удалённые", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleAntiDelete(value)
             })
         case let .saveEditHistory(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.clock, title: "История изменений сообщений", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.clock, title: "История изменений", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleSaveEditHistory(value)
             })
         case let .antiDeleteExceptions(count):
@@ -459,7 +459,7 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
         case .loggingHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ЛОГИРОВАНИЕ СООБЩЕНИЙ В ЧАТ", sectionId: self.section)
         case let .logMaster(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.savedMessages, title: "Логировать в отдельный чат", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.savedMessages, title: "Логи в чат", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleLogEditsAndDeletesToChat(value)
             })
         case let .logChatTarget(target):
@@ -472,11 +472,11 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
                 arguments.toggleLogPrivateChats(value)
             })
         case let .logGroups(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.groups, title: "Группы и супергруппы", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.groups, title: "Группы", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleLogGroups(value)
             })
         case let .logChannels(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.channels, title: "Каналы (ТГК)", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.channels, title: "Каналы", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleLogChannels(value)
             })
         case let .logDeletedMessages(value):
@@ -488,7 +488,7 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
                 arguments.toggleLogEditedMessages(value)
             })
         case let .logIncludeChatInfo(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.devices, title: "Указывать название чата", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.devices, title: "Имя чата в логе", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleLogIncludeChatInfo(value)
             })
         case .loggingFooter:
@@ -497,15 +497,15 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
         case .uiHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ИНТЕРФЕЙС И ИНФОРМАЦИЯ", sectionId: self.section)
         case let .showPeerIdAndDc(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.passkeys, title: "Показывать ID и Дата-центр (DC)", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.passkeys, title: "Показывать ID и DC", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleShowPeerIdAndDc(value)
             })
         case let .showChatMessageCount(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.privateChats, title: "Количество сообщений в чате", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.privateChats, title: "Счётчик сообщений", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleShowChatMessageCount(value)
             })
         case let .showMessageSeconds(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.clock, title: "Точное время (с секундами)", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.clock, title: "Время с секундами", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleShowMessageSeconds(value)
             })
         case let .videoNoteCamera(isBack):
@@ -527,7 +527,7 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
                 arguments.selectVideoNoteDuration()
             })
         case let .splitLongVideoNotes(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.videosBlue, title: "Разбивать длинные кружочки", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.videosBlue, title: "Нарезка кружочков", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleSplitLongVideoNotes(value)
             })
         case .uiFooter:
@@ -536,7 +536,7 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
         case .keepAliveHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ФОНОВАЯ РАБОТА И УВЕДОМЛЕНИЯ", sectionId: self.section)
         case let .keepAlive(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.powerSaving, title: "Работа в фоне (Keep-Alive)", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.powerSaving, title: "Фоновый Keep-Alive", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleKeepAlive(value)
             })
         case .keepAliveLocationStatus:

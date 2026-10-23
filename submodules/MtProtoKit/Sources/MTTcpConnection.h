@@ -32,6 +32,8 @@
 @property (nonatomic, strong, readonly) id internalId;
 @property (nonatomic, strong, readonly) MTTransportScheme *scheme;
 @property (nonatomic, strong, readonly) NSString *interface;
+@property (nonatomic, readonly) NSInteger datacenterId;
+@property (nonatomic, readonly) bool isMedia;
 
 @property (nonatomic, strong) NSString *(^getLogPrefix)();
 
