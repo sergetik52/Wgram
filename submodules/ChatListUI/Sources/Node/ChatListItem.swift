@@ -1426,6 +1426,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
     var avatarBadgeBackground: ASImageNode?
     let onlineNode: PeerOnlineMarkerNode
     var avatarTimerBadge: AvatarBadgeView?
+    var wgramStreakBadge: WgramStreakBadgeView?
     private var starView: StarView?
     var avatarLiveBadge: (outline: UIImageView, foreground: UIImageView)?
     let pinnedIconNode: ASImageNode
@@ -4532,6 +4533,33 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         strongSelf.avatarTimerBadge = nil
                         strongSelf.avatarNode.badgeView = nil
                         avatarTimerBadge.removeFromSuperview()
+                    }
+
+                    if WgramSettings.showChatStreaks, case let .peer(peerData) = item.content, let chatPeer = peerData.peer.chatMainPeer {
+                        let streakCount = WgramStreakManager.shared.getStreak(peerId: chatPeer.id)
+                        if streakCount > 0 {
+                            let streakBadge: WgramStreakBadgeView
+                            if let current = strongSelf.wgramStreakBadge {
+                                streakBadge = current
+                            } else {
+                                streakBadge = WgramStreakBadgeView(frame: CGRect())
+                                strongSelf.wgramStreakBadge = streakBadge
+                                strongSelf.avatarContainerNode.view.clipsToBounds = false
+                                strongSelf.avatarContainerNode.view.addSubview(streakBadge)
+                            }
+                            let badgeSize = streakBadge.update(streak: streakCount)
+                            let badgeOrigin = CGPoint(x: -4.0, y: avatarFrame.height - badgeSize.height + 2.0)
+                            streakBadge.frame = CGRect(origin: badgeOrigin, size: badgeSize)
+                        } else {
+                            if let streakBadge = strongSelf.wgramStreakBadge {
+                                strongSelf.wgramStreakBadge = nil
+                                streakBadge.removeFromSuperview()
+                            }
+                            WgramStreakManager.shared.checkAndCalculateIfNeeded(postbox: item.context.account.postbox, peerId: chatPeer.id)
+                        }
+                    } else if let streakBadge = strongSelf.wgramStreakBadge {
+                        strongSelf.wgramStreakBadge = nil
+                        streakBadge.removeFromSuperview()
                     }
                                   
                     let _ = measureApply()

@@ -385,6 +385,14 @@ func chatContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, promoI
                                 }
                             }
                         }
+
+                        items.append(.action(ContextMenuActionItem(text: "Статистика чата", icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Statistics"), color: theme.contextMenu.primaryColor) }, action: { [weak chatListController] c, _ in
+                            c?.dismiss(completion: {
+                                guard let chatListController = chatListController else { return }
+                                let controller = context.sharedContext.makeChatStatsController(context: context, peerId: peerId)
+                                chatListController.push(controller)
+                            })
+                        })))
                         
                         let archiveEnabled = !isSavedMessages && peerId != EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(777000)) && peerId == context.account.peerId
                         if let group = peerGroup {

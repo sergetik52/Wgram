@@ -43,6 +43,7 @@ private final class WgramSettingsControllerArguments {
     let toggleShowPeerIdAndDc: (Bool) -> Void
     let toggleShowChatMessageCount: (Bool) -> Void
     let toggleShowMessageSeconds: (Bool) -> Void
+    let toggleShowChatStreaks: (Bool) -> Void
     let selectVideoNoteCamera: () -> Void
     let selectVideoNoteDuration: () -> Void
     let toggleSplitLongVideoNotes: (Bool) -> Void
@@ -89,6 +90,7 @@ private final class WgramSettingsControllerArguments {
         toggleShowPeerIdAndDc: @escaping (Bool) -> Void,
         toggleShowChatMessageCount: @escaping (Bool) -> Void,
         toggleShowMessageSeconds: @escaping (Bool) -> Void,
+        toggleShowChatStreaks: @escaping (Bool) -> Void,
         selectVideoNoteCamera: @escaping () -> Void,
         selectVideoNoteDuration: @escaping () -> Void,
         toggleSplitLongVideoNotes: @escaping (Bool) -> Void,
@@ -131,6 +133,7 @@ private final class WgramSettingsControllerArguments {
         self.toggleShowPeerIdAndDc = toggleShowPeerIdAndDc
         self.toggleShowChatMessageCount = toggleShowChatMessageCount
         self.toggleShowMessageSeconds = toggleShowMessageSeconds
+        self.toggleShowChatStreaks = toggleShowChatStreaks
         self.selectVideoNoteCamera = selectVideoNoteCamera
         self.selectVideoNoteDuration = selectVideoNoteDuration
         self.toggleSplitLongVideoNotes = toggleSplitLongVideoNotes
@@ -220,6 +223,7 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
     case showPeerIdAndDc(Bool)
     case showChatMessageCount(Bool)
     case showMessageSeconds(Bool)
+    case showChatStreaks(Bool)
     case videoNoteCamera(Bool)
     case videoNoteDuration(Double)
     case splitLongVideoNotes(Bool)
@@ -249,7 +253,7 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
             return WgramSettingsSection.historyAndAntiDelete.rawValue
         case .loggingHeader, .logMaster, .logChatTarget, .logPrivateChats, .logGroups, .logChannels, .logDeletedMessages, .logEditedMessages, .logIncludeChatInfo, .loggingFooter:
             return WgramSettingsSection.messageLogging.rawValue
-        case .uiHeader, .showPeerIdAndDc, .showChatMessageCount, .showMessageSeconds, .videoNoteCamera, .videoNoteDuration, .splitLongVideoNotes, .uiFooter:
+        case .uiHeader, .showPeerIdAndDc, .showChatMessageCount, .showMessageSeconds, .showChatStreaks, .videoNoteCamera, .videoNoteDuration, .splitLongVideoNotes, .uiFooter:
             return WgramSettingsSection.uiAndInfo.rawValue
         case .keepAliveHeader, .keepAlive, .keepAliveLocationStatus, .keepAliveTestNotification, .keepAliveFooter:
             return WgramSettingsSection.keepAlive.rawValue
@@ -309,15 +313,16 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
         case .showPeerIdAndDc: return 48
         case .showChatMessageCount: return 49
         case .showMessageSeconds: return 50
-        case .videoNoteCamera: return 51
-        case .videoNoteDuration: return 52
-        case .splitLongVideoNotes: return 53
-        case .uiFooter: return 54
-        case .keepAliveHeader: return 55
-        case .keepAlive: return 56
-        case .keepAliveLocationStatus: return 57
-        case .keepAliveTestNotification: return 58
-        case .keepAliveFooter: return 59
+        case .showChatStreaks: return 51
+        case .videoNoteCamera: return 52
+        case .videoNoteDuration: return 53
+        case .splitLongVideoNotes: return 54
+        case .uiFooter: return 55
+        case .keepAliveHeader: return 56
+        case .keepAlive: return 57
+        case .keepAliveLocationStatus: return 58
+        case .keepAliveTestNotification: return 59
+        case .keepAliveFooter: return 60
         }
     }
     
@@ -508,6 +513,10 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.clock, title: "Время с секундами", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleShowMessageSeconds(value)
             })
+        case let .showChatStreaks(value):
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.privateChats, title: "Огоньки переписки 🔥", value: value, sectionId: self.section, style: .blocks, updated: { value in
+                arguments.toggleShowChatStreaks(value)
+            })
         case let .videoNoteCamera(isBack):
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.devices, title: "Камера для кружочков", label: isBack ? "Задняя (основная)" : "Фронтальная", sectionId: self.section, style: .blocks, action: {
                 arguments.selectVideoNoteCamera()
@@ -601,6 +610,7 @@ private struct WgramSettingsState: Equatable {
     var showPeerIdAndDc: Bool
     var showChatMessageCount: Bool
     var showMessageSeconds: Bool
+    var showChatStreaks: Bool
     var videoNoteCameraIsBack: Bool
     var maxVideoNoteDuration: Double
     var splitLongVideoNotes: Bool
@@ -649,6 +659,7 @@ private struct WgramSettingsState: Equatable {
         self.showPeerIdAndDc = WgramSettings.showPeerIdAndDc
         self.showChatMessageCount = WgramSettings.showChatMessageCount
         self.showMessageSeconds = WgramSettings.showMessageSeconds
+        self.showChatStreaks = WgramSettings.showChatStreaks
         self.videoNoteCameraIsBack = WgramSettings.videoNoteCameraIsBack
         self.maxVideoNoteDuration = WgramSettings.maxVideoNoteDuration
         self.splitLongVideoNotes = WgramSettings.splitLongVideoNotes
@@ -749,6 +760,7 @@ private func wgramSettingsEntries(presentationData: PresentationData, state: Wgr
     entries.append(.showPeerIdAndDc(state.showPeerIdAndDc))
     entries.append(.showChatMessageCount(state.showChatMessageCount))
     entries.append(.showMessageSeconds(state.showMessageSeconds))
+    entries.append(.showChatStreaks(state.showChatStreaks))
     entries.append(.videoNoteCamera(state.videoNoteCameraIsBack))
     entries.append(.videoNoteDuration(state.maxVideoNoteDuration))
     entries.append(.splitLongVideoNotes(state.splitLongVideoNotes))
@@ -930,6 +942,10 @@ public func wgramSettingsController(context: AccountContext) -> ViewController {
         toggleShowMessageSeconds: { value in
             WgramSettings.showMessageSeconds = value
             updateState { $0.showMessageSeconds = value }
+        },
+        toggleShowChatStreaks: { value in
+            WgramSettings.showChatStreaks = value
+            updateState { $0.showChatStreaks = value }
         },
         selectVideoNoteCamera: {
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }

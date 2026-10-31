@@ -1555,6 +1555,7 @@ public protocol SharedAccountContext: AnyObject {
     func openChatWallpaper(context: AccountContext, message: EngineRawMessage, present: @escaping (ViewController, Any?) -> Void)
     func makeRecentSessionsController(context: AccountContext, activeSessionsContext: ActiveSessionsContext) -> ViewController & RecentSessionsController
     func makeChatQrCodeScreen(context: AccountContext, peer: EnginePeer, threadId: Int64?, temporary: Bool) -> ViewController
+    func makeChatStatsController(context: AccountContext, peerId: EnginePeer.Id) -> ViewController
     func makePremiumIntroController(context: AccountContext, source: PremiumIntroSource, forceDark: Bool, dismissed: (() -> Void)?) -> ViewController
     func makePremiumIntroController(sharedContext: SharedAccountContext, engine: TelegramEngineUnauthorized, inAppPurchaseManager: InAppPurchaseManager, source: PremiumIntroSource, proceed: (() -> Void)?) -> ViewController
     func makePremiumDemoController(context: AccountContext, subject: PremiumDemoSubject, forceDark: Bool, action: @escaping () -> Void, dismissed: (() -> Void)?) -> ViewController

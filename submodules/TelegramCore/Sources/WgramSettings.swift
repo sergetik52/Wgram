@@ -37,6 +37,7 @@ public struct WgramSettings {
     private static let showPeerIdAndDcKey = "Wgram_ShowPeerIdAndDc"
     private static let showChatMessageCountKey = "Wgram_ShowChatMessageCount"
     private static let showMessageSecondsKey = "Wgram_ShowMessageSeconds"
+    private static let showChatStreaksKey = "Wgram_ShowChatStreaks"
     private static let videoNoteCameraIsBackKey = "Wgram_VideoNoteCameraIsBack"
     private static let maxVideoNoteDurationKey = "Wgram_MaxVideoNoteDuration"
     private static let splitLongVideoNotesKey = "Wgram_SplitLongVideoNotes"
@@ -361,6 +362,16 @@ public struct WgramSettings {
         get { UserDefaults.standard.bool(forKey: showMessageSecondsKey) }
         set {
             UserDefaults.standard.set(newValue, forKey: showMessageSecondsKey)
+            notifyChanged()
+        }
+    }
+
+    public static var showChatStreaks: Bool {
+        get {
+            return UserDefaults.standard.object(forKey: showChatStreaksKey) as? Bool ?? true
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: showChatStreaksKey)
             notifyChanged()
         }
     }
