@@ -119,6 +119,69 @@ public final class WgramChatStatsEngine {
         return self.inMemoryCache[peerId.toInt64()]?[period]
     }
     
+    public func scanChat(account: Account, peerId: PeerId, period: WgramChatStatsData.Period, progress: @escaping (Int, Bool, WgramChatStatsData?) -> Void) {
+        if let cached = self.getCached(peerId: peerId, period: period) {
+            progress(cached.totalMessages, true, cached)
+            return
+        }
+        
+        let localMessagesSignal = account.postbox.transaction { transaction -> [Message] in
+            var allMessages: [Message] = []
+            var fromIndex = MessageIndex.upperBound(peerId: peerId, namespace: Namespaces.Message.Cloud)
+            let lowerBound = MessageIndex.lowerBound(peerId: peerId, namespace: Namespaces.Message.Cloud)
+            let limit = 1000
+            
+            while true {
+                let batch = transaction.getMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, from: fromIndex, includeFrom: false, to: lowerBound, limit: limit)
+                if batch.isEmpty {
+                    break
+                }
+                allMessages.append(contentsOf: batch)
+                if let last = batch.last {
+                    fromIndex = last.index
+                }
+                if batch.count < limit || allMessages.count >= 5000 {
+                    break
+                }
+            }
+            return allMessages
+        }
+        
+        let cloudSummarySignal = fetchWgramCloudChatSummary(account: account, peerId: peerId)
+        
+        let _ = (combineLatest(localMessagesSignal, cloudSummarySignal)
+        |> deliverOn(self.queue)).start(next: { [weak self] rawMessages, cloudSummary in
+            guard let strongSelf = self else { return }
+            
+            var sortedMessages = rawMessages
+            sortedMessages.sort(by: { $0.timestamp < $1.timestamp })
+            
+            // Trigger streak calculation
+            WgramStreakManager.shared.checkAndCalculateIfNeeded(account: account, peerId: peerId)
+            let currentStreak = WgramStreakManager.shared.getStreak(peerId: peerId)
+            
+            let allTimestamps = sortedMessages.map { $0.timestamp }
+            let streakResult = WgramStreakManager.computeStreak(timestamps: allTimestamps)
+            let effectiveStreak = (current: max(currentStreak, streakResult.current), longest: max(currentStreak, streakResult.longest))
+            
+            // Compute stats for all periods and cache them
+            let statsMap = strongSelf.processAllPeriods(
+                rawMessages: sortedMessages,
+                peerId: peerId,
+                accountPeerId: account.peerId,
+                streakResult: effectiveStreak,
+                cloudSummary: cloudSummary
+            )
+            
+            strongSelf.inMemoryCache[peerId.toInt64()] = statsMap
+            
+            let resultData = statsMap[period] ?? statsMap[.allTime]!
+            Queue.mainQueue().async {
+                progress(resultData.totalMessages, true, resultData)
+            }
+        })
+    }
+    
     public func scanChat(postbox: Postbox, peerId: PeerId, accountPeerId: PeerId, period: WgramChatStatsData.Period, progress: @escaping (Int, Bool, WgramChatStatsData?) -> Void) {
         if let cached = self.getCached(peerId: peerId, period: period) {
             progress(cached.totalMessages, true, cached)
@@ -140,7 +203,7 @@ public final class WgramChatStatsEngine {
                 if let last = batch.last {
                     fromIndex = last.index
                 }
-                if batch.count < limit {
+                if batch.count < limit || allMessages.count >= 5000 {
                     break
                 }
             }
@@ -149,17 +212,19 @@ public final class WgramChatStatsEngine {
         |> deliverOn(self.queue)).start(next: { [weak self] rawMessages in
             guard let strongSelf = self else { return }
             
-            // Sort chronologically (oldest to newest)
             var sortedMessages = rawMessages
             sortedMessages.sort(by: { $0.timestamp < $1.timestamp })
             
-            // Update Streak Manager with full timestamps
             let allTimestamps = sortedMessages.map { $0.timestamp }
             let streakResult = WgramStreakManager.computeStreak(timestamps: allTimestamps)
-            WgramStreakManager.shared.setStreak(peerId: peerId, streak: streakResult.current)
             
-            // Compute stats for all periods and cache them
-            let statsMap = strongSelf.processAllPeriods(rawMessages: sortedMessages, peerId: peerId, accountPeerId: accountPeerId, streakResult: streakResult)
+            let statsMap = strongSelf.processAllPeriods(
+                rawMessages: sortedMessages,
+                peerId: peerId,
+                accountPeerId: accountPeerId,
+                streakResult: streakResult,
+                cloudSummary: WgramCloudChatSummary()
+            )
             
             strongSelf.inMemoryCache[peerId.toInt64()] = statsMap
             
@@ -170,7 +235,7 @@ public final class WgramChatStatsEngine {
         })
     }
     
-    private func processAllPeriods(rawMessages: [Message], peerId: PeerId, accountPeerId: PeerId, streakResult: (current: Int, longest: Int)) -> [WgramChatStatsData.Period: WgramChatStatsData] {
+    private func processAllPeriods(rawMessages: [Message], peerId: PeerId, accountPeerId: PeerId, streakResult: (current: Int, longest: Int), cloudSummary: WgramCloudChatSummary) -> [WgramChatStatsData.Period: WgramChatStatsData] {
         var map: [WgramChatStatsData.Period: WgramChatStatsData] = [:]
         let now = Int32(Date().timeIntervalSince1970)
         
@@ -190,22 +255,39 @@ public final class WgramChatStatsEngine {
                 filteredMessages = rawMessages
             }
             
-            let data = self.calculateStats(messages: filteredMessages, peerId: peerId, accountPeerId: accountPeerId, period: period, streakResult: streakResult)
+            let data = self.calculateStats(messages: filteredMessages, peerId: peerId, accountPeerId: accountPeerId, period: period, streakResult: streakResult, cloudSummary: cloudSummary)
             map[period] = data
         }
         
         return map
     }
     
-    private func calculateStats(messages: [Message], peerId: PeerId, accountPeerId: PeerId, period: WgramChatStatsData.Period, streakResult: (current: Int, longest: Int)) -> WgramChatStatsData {
+    private func calculateStats(messages: [Message], peerId: PeerId, accountPeerId: PeerId, period: WgramChatStatsData.Period, streakResult: (current: Int, longest: Int), cloudSummary: WgramCloudChatSummary) -> WgramChatStatsData {
         let data = WgramChatStatsData(peerId: peerId, accountPeerId: accountPeerId, period: period)
-        guard !messages.isEmpty else { return data }
+        if messages.isEmpty {
+            if period == .allTime && cloudSummary.totalCount > 0 {
+                data.totalMessages = cloudSummary.totalCount
+                data.myMessagesCount = cloudSummary.myCount > 0 ? cloudSummary.myCount : cloudSummary.totalCount / 2
+                data.peerMessagesCount = max(0, data.totalMessages - data.myMessagesCount)
+                data.firstMessageDate = cloudSummary.firstMessageDate
+                data.photoCount = cloudSummary.photoCount
+                data.videoCount = cloudSummary.videoCount
+                data.voiceCount = cloudSummary.voiceCount
+                data.videoNoteCount = cloudSummary.roundVideoCount
+                data.fileCount = cloudSummary.documentCount
+                let totalMedia = data.photoCount + data.videoCount + data.voiceCount + data.videoNoteCount + data.fileCount
+                if data.totalMessages > totalMedia {
+                    data.textCount = data.totalMessages - totalMedia
+                }
+            }
+            return data
+        }
         
         let calendar = Calendar.current
         data.firstMessageDate = Date(timeIntervalSince1970: TimeInterval(messages[0].timestamp))
         data.totalMessages = messages.count
         data.currentStreakDays = streakResult.current
-        data.longestStreakDays = streakResult.longest
+        data.longestStreakDays = max(streakResult.longest, streakResult.current)
         
         var myWords: [String: Int] = [:]
         var peerWords: [String: Int] = [:]
@@ -514,6 +596,33 @@ public final class WgramChatStatsEngine {
             }
             if min100 < Double.greatestFiniteMagnitude {
                 data.fastest100MessagesSeconds = min100
+            }
+        }
+        
+        if period == .allTime && cloudSummary.totalCount > 0 {
+            data.totalMessages = cloudSummary.totalCount
+            if cloudSummary.myCount > 0 {
+                data.myMessagesCount = cloudSummary.myCount
+                data.peerMessagesCount = max(0, cloudSummary.totalCount - cloudSummary.myCount)
+            } else if (myMessageCount + peerMessageCount) > 0 {
+                let ratio = Double(myMessageCount) / Double(myMessageCount + peerMessageCount)
+                data.myMessagesCount = Int(Double(cloudSummary.totalCount) * ratio)
+                data.peerMessagesCount = max(0, cloudSummary.totalCount - data.myMessagesCount)
+            }
+            
+            if let firstDate = cloudSummary.firstMessageDate {
+                data.firstMessageDate = firstDate
+            }
+            
+            data.photoCount = max(data.photoCount, cloudSummary.photoCount)
+            data.videoCount = max(data.videoCount, cloudSummary.videoCount)
+            data.voiceCount = max(data.voiceCount, cloudSummary.voiceCount)
+            data.videoNoteCount = max(data.videoNoteCount, cloudSummary.roundVideoCount)
+            data.fileCount = max(data.fileCount, cloudSummary.documentCount)
+            
+            let totalMedia = data.photoCount + data.videoCount + data.voiceCount + data.videoNoteCount + data.fileCount + data.stickerCount + data.locationCount
+            if data.totalMessages > totalMedia {
+                data.textCount = data.totalMessages - totalMedia
             }
         }
         

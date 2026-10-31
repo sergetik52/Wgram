@@ -4565,8 +4565,8 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                                 strongSelf.wgramStreakBadge = nil
                                 streakBadge.removeFromSuperview()
                             }
-                            WgramStreakManager.shared.checkAndCalculateIfNeeded(postbox: item.context.account.postbox, peerId: peerId)
                         }
+                        WgramStreakManager.shared.checkAndCalculateIfNeeded(account: item.context.account, peerId: peerId)
 
                         strongSelf.streakObserver = NotificationCenter.default.addObserver(forName: WgramStreakManager.streakUpdatedNotification, object: peerId, queue: OperationQueue.main, using: { [weak strongSelf] _ in
                             guard let strongSelf = strongSelf else { return }

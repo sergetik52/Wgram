@@ -163,16 +163,16 @@ public final class WgramChatStatsController: TelegramBaseController {
         self.cardsStackView.isHidden = true
         self.loadingContainer.isHidden = false
         self.loadingSpinner.startAnimating()
+        self.loadingLabel.text = "📊 Загрузка статистики из облака Telegram..."
         
         WgramChatStatsEngine.shared.scanChat(
-            postbox: self.context.account.postbox,
+            account: self.context.account,
             peerId: self.peerId,
-            accountPeerId: self.context.account.peerId,
             period: self.selectedPeriod,
             progress: { [weak self] count, isFinished, data in
                 guard let strongSelf = self else { return }
                 
-                strongSelf.loadingLabel.text = "📊 Сканировано сообщений: \(count)"
+                strongSelf.loadingLabel.text = "📊 Загружено сообщений: \(count)"
                 
                 if isFinished, let stats = data {
                     strongSelf.currentData = stats
@@ -298,13 +298,20 @@ public final class WgramChatStatsController: TelegramBaseController {
             dateStr = "—"
         }
         
+        let numF = NumberFormatter()
+        numF.groupingSeparator = " "
+        numF.numberStyle = .decimal
+        let totalFormatted = numF.string(from: NSNumber(value: data.totalMessages)) ?? "\(data.totalMessages)"
+        let myFormatted = numF.string(from: NSNumber(value: data.myMessagesCount)) ?? "\(data.myMessagesCount)"
+        let peerFormatted = numF.string(from: NSNumber(value: data.peerMessagesCount)) ?? "\(data.peerMessagesCount)"
+        
         let r1 = self.createStatRow(label: "📅 Первое сообщение", value: dateStr, theme: theme)
-        let r2 = self.createStatRow(label: "💬 Всего сообщений", value: "\(data.totalMessages)", theme: theme, isBold: true)
+        let r2 = self.createStatRow(label: "💬 Всего сообщений", value: totalFormatted, theme: theme, isBold: true)
         
         // My vs Peer bar
         let authorView = UIView()
         let authorLabel = UILabel()
-        authorLabel.text = "📝 Ты: \(data.myMessagesCount)  •  Он: \(data.peerMessagesCount)"
+        authorLabel.text = "📝 Ты: \(myFormatted)  •  Он: \(peerFormatted)"
         authorLabel.font = UIFont.systemFont(ofSize: 14.0, weight: .medium)
         authorLabel.textColor = theme.list.itemPrimaryTextColor
         authorLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -332,10 +339,29 @@ public final class WgramChatStatsController: TelegramBaseController {
             bar.bottomAnchor.constraint(equalTo: authorView.bottomAnchor)
         ])
         
-        let streakStr = data.longestStreakDays > 0 ? "\(data.longestStreakDays) дн без пауз" : "—"
+        let streakStr: String
+        if data.currentStreakDays > 0 {
+            streakStr = "\(data.currentStreakDays) дн без пауз" + (data.longestStreakDays > data.currentStreakDays ? " (макс: \(data.longestStreakDays))" : "")
+        } else if data.longestStreakDays > 0 {
+            streakStr = "Рекорд: \(data.longestStreakDays) дн"
+        } else {
+            streakStr = "—"
+        }
         let r3 = self.createStatRow(label: "🔥 Серия переписки", value: streakStr, theme: theme)
         
-        let silenceStr = data.longestSilenceDays > 0 ? "\(data.longestSilenceDays) дн" : "< 1 дня"
+        let silenceStr: String
+        if data.longestSilenceDays > 0 {
+            if let start = data.longestSilenceStartDate {
+                let df = DateFormatter()
+                df.locale = Locale(identifier: "ru_RU")
+                df.dateFormat = "LLLL yyyy"
+                silenceStr = "\(data.longestSilenceDays) дн (\(df.string(from: start)))"
+            } else {
+                silenceStr = "\(data.longestSilenceDays) дн"
+            }
+        } else {
+            silenceStr = "< 1 дня"
+        }
         let r4 = self.createStatRow(label: "🤐 Самая долгая тишина", value: silenceStr, theme: theme)
         
         stack.addArrangedSubview(r1)
