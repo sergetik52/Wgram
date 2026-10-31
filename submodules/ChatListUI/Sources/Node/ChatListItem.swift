@@ -1426,8 +1426,6 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
     var avatarBadgeBackground: ASImageNode?
     let onlineNode: PeerOnlineMarkerNode
     var avatarTimerBadge: AvatarBadgeView?
-    var wgramStreakBadge: WgramStreakBadgeView?
-    private var streakObserver: NSObjectProtocol?
     private var starView: StarView?
     var avatarLiveBadge: (outline: UIImageView, foreground: UIImageView)?
     let pinnedIconNode: ASImageNode
@@ -1832,9 +1830,6 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
 
     deinit {
         self.cachedDataDisposable.dispose()
-        if let streakObserver = self.streakObserver {
-            NotificationCenter.default.removeObserver(streakObserver)
-        }
     }
     
     override public func secondaryAction(at point: CGPoint) {
@@ -4537,62 +4532,6 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         strongSelf.avatarTimerBadge = nil
                         strongSelf.avatarNode.badgeView = nil
                         avatarTimerBadge.removeFromSuperview()
-                    }
-
-                    if let observer = strongSelf.streakObserver {
-                        strongSelf.streakObserver = nil
-                        NotificationCenter.default.removeObserver(observer)
-                    }
-
-                    if WgramSettings.showChatStreaks, case let .peer(peerData) = item.content, case let .user(chatUser) = peerData.peer.chatMainPeer, chatUser.botInfo == nil, chatUser.id != item.context.account.peerId {
-                        let peerId = chatUser.id
-                        let streakCount = WgramStreakManager.shared.getStreak(peerId: peerId)
-                        if streakCount > 0 {
-                            let streakBadge: WgramStreakBadgeView
-                            if let current = strongSelf.wgramStreakBadge {
-                                streakBadge = current
-                            } else {
-                                streakBadge = WgramStreakBadgeView(frame: CGRect())
-                                strongSelf.wgramStreakBadge = streakBadge
-                                strongSelf.avatarContainerNode.view.clipsToBounds = false
-                                strongSelf.avatarContainerNode.view.addSubview(streakBadge)
-                            }
-                            let badgeSize = streakBadge.update(streak: streakCount)
-                            let badgeOrigin = CGPoint(x: -4.0, y: avatarFrame.height - badgeSize.height + 2.0)
-                            streakBadge.frame = CGRect(origin: badgeOrigin, size: badgeSize)
-                        } else {
-                            if let streakBadge = strongSelf.wgramStreakBadge {
-                                strongSelf.wgramStreakBadge = nil
-                                streakBadge.removeFromSuperview()
-                            }
-                        }
-                        WgramStreakManager.shared.checkAndCalculateIfNeeded(account: item.context.account, peerId: peerId)
-
-                        strongSelf.streakObserver = NotificationCenter.default.addObserver(forName: WgramStreakManager.streakUpdatedNotification, object: peerId, queue: OperationQueue.main, using: { [weak strongSelf] _ in
-                            guard let strongSelf = strongSelf else { return }
-                            let newStreak = WgramStreakManager.shared.getStreak(peerId: peerId)
-                            if newStreak > 0 {
-                                let streakBadge: WgramStreakBadgeView
-                                if let current = strongSelf.wgramStreakBadge {
-                                    streakBadge = current
-                                } else {
-                                    streakBadge = WgramStreakBadgeView(frame: CGRect())
-                                    strongSelf.wgramStreakBadge = streakBadge
-                                    strongSelf.avatarContainerNode.view.clipsToBounds = false
-                                    strongSelf.avatarContainerNode.view.addSubview(streakBadge)
-                                }
-                                let badgeSize = streakBadge.update(streak: newStreak)
-                                let avatarH = strongSelf.avatarNode.frame.height > 0 ? strongSelf.avatarNode.frame.height : 60.0
-                                let badgeOrigin = CGPoint(x: -4.0, y: avatarH - badgeSize.height + 2.0)
-                                streakBadge.frame = CGRect(origin: badgeOrigin, size: badgeSize)
-                            } else if let badge = strongSelf.wgramStreakBadge {
-                                strongSelf.wgramStreakBadge = nil
-                                badge.removeFromSuperview()
-                            }
-                        })
-                    } else if let streakBadge = strongSelf.wgramStreakBadge {
-                        strongSelf.wgramStreakBadge = nil
-                        streakBadge.removeFromSuperview()
                     }
                                   
                     let _ = measureApply()

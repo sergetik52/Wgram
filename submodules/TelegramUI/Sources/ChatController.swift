@@ -6170,18 +6170,6 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                                 strongSelf.push(statsController)
                             })))
                         }
-
-                        items.append(.action(ContextMenuActionItem(text: "Статистика чата", icon: { theme in
-                            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Statistics"), color: theme.actionSheet.primaryTextColor)
-                        }, action: { _, f in
-                            f(.dismissWithoutContent)
-                            guard let strongSelf = self, let peer = strongSelf.presentationInterfaceState.renderedPeer?.chatMainPeer else {
-                                return
-                            }
-                            strongSelf.view.endEditing(true)
-                            let statsController = WgramChatStatsController(context: context, peerId: peer.id)
-                            strongSelf.push(statsController)
-                        })))
                         items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.Conversation_Search, icon: { theme in
                             return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Search"), color: theme.actionSheet.primaryTextColor)
                         }, action: { _, f in

@@ -2796,10 +2796,6 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     public func makeChatQrCodeScreen(context: AccountContext, peer: EnginePeer, threadId: Int64?, temporary: Bool) -> ViewController {
         return ChatQrCodeScreenImpl(context: context, subject: .peer(peer: peer, threadId: threadId, temporary: temporary))
     }
-
-    public func makeChatStatsController(context: AccountContext, peerId: EnginePeer.Id) -> ViewController {
-        return WgramChatStatsController(context: context, peerId: peerId)
-    }
     
     public func makePrivacyAndSecurityController(context: AccountContext) -> ViewController {
         return SettingsUI.makePrivacyAndSecurityController(context: context)
