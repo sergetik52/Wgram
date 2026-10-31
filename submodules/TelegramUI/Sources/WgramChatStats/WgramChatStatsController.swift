@@ -26,6 +26,7 @@ public final class WgramChatStatsController: TelegramBaseController {
     private let loadingLabel = UILabel()
     
     private let cardsStackView = UIStackView()
+    private var validLayout: ContainerViewLayout?
     
     public init(context: AccountContext, peerId: PeerId) {
         self.context = context
@@ -106,12 +107,12 @@ public final class WgramChatStatsController: TelegramBaseController {
     
     override public func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         super.containerLayoutUpdated(layout, transition: transition)
+        self.validLayout = layout
         
         let navBarHeight = self.navigationLayout(layout: layout).navigationFrame.maxY
         let bounds = CGRect(origin: CGPoint(x: 0, y: navBarHeight), size: CGSize(width: layout.size.width, height: layout.size.height - navBarHeight))
         
         self.scrollView.frame = bounds
-        self.contentView.frame = CGRect(x: 0, y: 0, width: layout.size.width, height: self.contentView.frame.height)
         
         let horizontalInset: CGFloat = 16.0
         let contentWidth = layout.size.width - horizontalInset * 2.0
@@ -122,16 +123,22 @@ public final class WgramChatStatsController: TelegramBaseController {
         self.loadingSpinner.frame = CGRect(x: (contentWidth - 30.0) / 2.0, y: 10.0, width: 30.0, height: 30.0)
         self.loadingLabel.frame = CGRect(x: 0, y: 48.0, width: contentWidth, height: 25.0)
         
-        self.cardsStackView.frame = CGRect(x: horizontalInset, y: 60.0, width: contentWidth, height: self.cardsStackView.systemLayoutSizeFitting(CGSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)).height)
+        let stackSize = self.cardsStackView.systemLayoutSizeFitting(
+            CGSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        )
+        self.cardsStackView.frame = CGRect(x: horizontalInset, y: 60.0, width: contentWidth, height: max(100.0, stackSize.height))
         
-        self.updateContentHeight()
+        self.updateContentHeight(contentWidth: layout.size.width)
     }
     
-    private func updateContentHeight() {
+    private func updateContentHeight(contentWidth: CGFloat? = nil) {
+        let width = contentWidth ?? self.validLayout?.size.width ?? (self.scrollView.bounds.width > 0 ? self.scrollView.bounds.width : self.view.bounds.width)
         let bottomY = self.cardsStackView.isHidden ? self.loadingContainer.frame.maxY : self.cardsStackView.frame.maxY
-        let totalHeight = max(bottomY + 40.0, self.scrollView.bounds.height + 1.0)
-        self.contentView.frame.size = CGSize(width: self.scrollView.bounds.width, height: totalHeight)
-        self.scrollView.contentSize = self.contentView.frame.size
+        let totalHeight = max(bottomY + 60.0, self.scrollView.bounds.height + 1.0)
+        self.contentView.frame = CGRect(x: 0, y: 0, width: width, height: totalHeight)
+        self.scrollView.contentSize = CGSize(width: width, height: totalHeight)
     }
     
     @objc private func periodChanged() {
@@ -173,7 +180,9 @@ public final class WgramChatStatsController: TelegramBaseController {
                     strongSelf.loadingSpinner.stopAnimating()
                     strongSelf.cardsStackView.isHidden = false
                     strongSelf.renderAllCards(data: stats)
-                    strongSelf.view.setNeedsLayout()
+                    if let layout = strongSelf.validLayout {
+                        strongSelf.containerLayoutUpdated(layout, transition: .immediate)
+                    }
                 }
             }
         )

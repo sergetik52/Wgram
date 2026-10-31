@@ -125,55 +125,49 @@ public final class WgramChatStatsEngine {
             return
         }
         
-        self.queue.async {
-            var rawMessages: [Message] = []
+        let _ = (postbox.transaction { transaction -> [Message] in
+            var allMessages: [Message] = []
             var fromIndex = MessageIndex.upperBound(peerId: peerId, namespace: Namespaces.Message.Cloud)
             let lowerBound = MessageIndex.lowerBound(peerId: peerId, namespace: Namespaces.Message.Cloud)
             let limit = 1000
-            var hasMore = true
             
-            while hasMore {
-                var currentBatch: [Message] = []
-                let _ = postbox.transaction { transaction in
-                    currentBatch = transaction.getMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, from: fromIndex, includeFrom: false, to: lowerBound, limit: limit)
-                }.start(next: { _ in })
-                
-                if currentBatch.isEmpty {
+            while true {
+                let batch = transaction.getMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, from: fromIndex, includeFrom: false, to: lowerBound, limit: limit)
+                if batch.isEmpty {
                     break
                 }
-                
-                rawMessages.append(contentsOf: currentBatch)
-                if let last = currentBatch.last {
+                allMessages.append(contentsOf: batch)
+                if let last = batch.last {
                     fromIndex = last.index
                 }
-                
-                Queue.mainQueue().async {
-                    progress(rawMessages.count, false, nil)
-                }
-                
-                if currentBatch.count < limit {
-                    hasMore = false
+                if batch.count < limit {
+                    break
                 }
             }
+            return allMessages
+        }
+        |> deliverOn(self.queue)).start(next: { [weak self] rawMessages in
+            guard let strongSelf = self else { return }
             
             // Sort chronologically (oldest to newest)
-            rawMessages.sort(by: { $0.timestamp < $1.timestamp })
+            var sortedMessages = rawMessages
+            sortedMessages.sort(by: { $0.timestamp < $1.timestamp })
             
             // Update Streak Manager with full timestamps
-            let allTimestamps = rawMessages.map { $0.timestamp }
+            let allTimestamps = sortedMessages.map { $0.timestamp }
             let streakResult = WgramStreakManager.computeStreak(timestamps: allTimestamps)
             WgramStreakManager.shared.setStreak(peerId: peerId, streak: streakResult.current)
             
             // Compute stats for all periods and cache them
-            let statsMap = self.processAllPeriods(rawMessages: rawMessages, peerId: peerId, accountPeerId: accountPeerId, streakResult: streakResult)
+            let statsMap = strongSelf.processAllPeriods(rawMessages: sortedMessages, peerId: peerId, accountPeerId: accountPeerId, streakResult: streakResult)
             
-            self.inMemoryCache[peerId.toInt64()] = statsMap
+            strongSelf.inMemoryCache[peerId.toInt64()] = statsMap
             
             let resultData = statsMap[period] ?? statsMap[.allTime]!
             Queue.mainQueue().async {
                 progress(resultData.totalMessages, true, resultData)
             }
-        }
+        })
     }
     
     private func processAllPeriods(rawMessages: [Message], peerId: PeerId, accountPeerId: PeerId, streakResult: (current: Int, longest: Int)) -> [WgramChatStatsData.Period: WgramChatStatsData] {

@@ -15,7 +15,8 @@ public final class WgramStreakManager {
     }
     
     private func loadFromDisk() {
-        if let dict = UserDefaults.standard.dictionary(forKey: "Wgram_Streaks_Cache") as? [String: Int] {
+        UserDefaults.standard.removeObject(forKey: "Wgram_Streaks_Cache")
+        if let dict = UserDefaults.standard.dictionary(forKey: "Wgram_Streaks_Cache_v2") as? [String: Int] {
             for (key, val) in dict {
                 if let id = Int64(key) {
                     self.inMemoryStreaks[id] = val
@@ -29,7 +30,7 @@ public final class WgramStreakManager {
         for (id, val) in self.inMemoryStreaks {
             dict["\(id)"] = val
         }
-        UserDefaults.standard.set(dict, forKey: "Wgram_Streaks_Cache")
+        UserDefaults.standard.set(dict, forKey: "Wgram_Streaks_Cache_v2")
     }
     
     public func getStreak(peerId: PeerId) -> Int {
@@ -59,48 +60,42 @@ public final class WgramStreakManager {
         let sortedDays = uniqueDays.sorted(by: >)
         guard let latestDay = sortedDays.first else { return (0, 0) }
         
-        let today = calendar.startOfDay(for: Date())
-        guard let yesterday = calendar.date(byAdding: .day, value: -1, to: today) else { return (0, 0) }
-        
         var currentStreak = 0
-        if latestDay == today || latestDay == yesterday {
+        if calendar.isDateInToday(latestDay) || calendar.isDateInYesterday(latestDay) {
             currentStreak = 1
-            if var expectedPrev = calendar.date(byAdding: .day, value: -1, to: latestDay) {
-                for day in sortedDays.dropFirst() {
-                    if day == expectedPrev {
-                        currentStreak += 1
-                        if let nextExpected = calendar.date(byAdding: .day, value: -1, to: expectedPrev) {
-                            expectedPrev = nextExpected
-                        } else {
-                            break
-                        }
-                    } else if day > expectedPrev {
-                        continue
-                    } else {
-                        break
-                    }
+            var lastStreakDay = latestDay
+            for day in sortedDays.dropFirst() {
+                let diff = calendar.dateComponents([.day], from: day, to: lastStreakDay).day ?? 0
+                if diff == 0 {
+                    continue
+                } else if diff == 1 {
+                    currentStreak += 1
+                    lastStreakDay = day
+                } else {
+                    break
                 }
             }
         }
         
         var longestStreak = 0
         var tempStreak = 0
-        var expectedNext: Date? = nil
+        var prevDay: Date? = nil
         
         for day in sortedDays.reversed() {
-            if let expected = expectedNext {
-                if day == expected {
+            if let prev = prevDay {
+                let diff = calendar.dateComponents([.day], from: prev, to: day).day ?? 0
+                if diff == 1 {
                     tempStreak += 1
-                } else if day > expected {
+                } else if diff > 1 {
                     tempStreak = 1
                 }
             } else {
                 tempStreak = 1
             }
+            prevDay = day
             if tempStreak > longestStreak {
                 longestStreak = tempStreak
             }
-            expectedNext = calendar.date(byAdding: .day, value: 1, to: day)
         }
         
         return (currentStreak, longestStreak)
@@ -114,10 +109,24 @@ public final class WgramStreakManager {
         self.isCalculating.insert(key)
         
         let _ = (postbox.transaction { transaction -> [Int32] in
-            let fromIndex = MessageIndex.upperBound(peerId: peerId, namespace: Namespaces.Message.Cloud)
+            var allTimestamps: [Int32] = []
+            var fromIndex = MessageIndex.upperBound(peerId: peerId, namespace: Namespaces.Message.Cloud)
             let toIndex = MessageIndex.lowerBound(peerId: peerId, namespace: Namespaces.Message.Cloud)
-            let messages = transaction.getMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, from: fromIndex, includeFrom: true, to: toIndex, limit: 200)
-            return messages.map { $0.timestamp }
+            
+            while true {
+                let batch = transaction.getMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, from: fromIndex, includeFrom: false, to: toIndex, limit: 1000)
+                if batch.isEmpty {
+                    break
+                }
+                allTimestamps.append(contentsOf: batch.map { $0.timestamp })
+                if let last = batch.last {
+                    fromIndex = last.index
+                }
+                if batch.count < 1000 || allTimestamps.count >= 5000 {
+                    break
+                }
+            }
+            return allTimestamps
         }
         |> deliverOn(self.queue)).start(next: { [weak self] timestamps in
             guard let strongSelf = self else { return }
