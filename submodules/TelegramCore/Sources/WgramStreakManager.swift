@@ -114,7 +114,9 @@ public final class WgramStreakManager {
         self.isCalculating.insert(key)
         
         let _ = (postbox.transaction { transaction -> [Int32] in
-            let messages = transaction.getMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, from: MessageIndex.absoluteUpperBound(), includeFrom: false, to: MessageIndex.absoluteLowerBound(), limit: 200)
+            let fromIndex = MessageIndex.upperBound(peerId: peerId, namespace: Namespaces.Message.Cloud)
+            let toIndex = MessageIndex.lowerBound(peerId: peerId, namespace: Namespaces.Message.Cloud)
+            let messages = transaction.getMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, from: fromIndex, includeFrom: true, to: toIndex, limit: 200)
             return messages.map { $0.timestamp }
         }
         |> deliverOn(self.queue)).start(next: { [weak self] timestamps in

@@ -127,14 +127,15 @@ public final class WgramChatStatsEngine {
         
         self.queue.async {
             var rawMessages: [Message] = []
-            var fromIndex = MessageIndex.absoluteUpperBound()
+            var fromIndex = MessageIndex.upperBound(peerId: peerId, namespace: Namespaces.Message.Cloud)
+            let lowerBound = MessageIndex.lowerBound(peerId: peerId, namespace: Namespaces.Message.Cloud)
             let limit = 1000
             var hasMore = true
             
             while hasMore {
                 var currentBatch: [Message] = []
                 let _ = postbox.transaction { transaction in
-                    currentBatch = transaction.getMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, from: fromIndex, includeFrom: false, to: MessageIndex.absoluteLowerBound(), limit: limit)
+                    currentBatch = transaction.getMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, from: fromIndex, includeFrom: false, to: lowerBound, limit: limit)
                 }.start(next: { _ in })
                 
                 if currentBatch.isEmpty {

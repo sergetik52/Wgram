@@ -4535,8 +4535,8 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         avatarTimerBadge.removeFromSuperview()
                     }
 
-                    if WgramSettings.showChatStreaks, case let .peer(peerData) = item.content, let chatPeer = peerData.peer.chatMainPeer {
-                        let streakCount = WgramStreakManager.shared.getStreak(peerId: chatPeer.id)
+                    if WgramSettings.showChatStreaks, case let .peer(peerData) = item.content, case let .user(chatUser) = peerData.peer.chatMainPeer, chatUser.botInfo == nil, chatUser.id != item.context.account.peerId {
+                        let streakCount = WgramStreakManager.shared.getStreak(peerId: chatUser.id)
                         if streakCount > 0 {
                             let streakBadge: WgramStreakBadgeView
                             if let current = strongSelf.wgramStreakBadge {
@@ -4555,7 +4555,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                                 strongSelf.wgramStreakBadge = nil
                                 streakBadge.removeFromSuperview()
                             }
-                            WgramStreakManager.shared.checkAndCalculateIfNeeded(postbox: item.context.account.postbox, peerId: chatPeer.id)
+                            WgramStreakManager.shared.checkAndCalculateIfNeeded(postbox: item.context.account.postbox, peerId: chatUser.id)
                         }
                     } else if let streakBadge = strongSelf.wgramStreakBadge {
                         strongSelf.wgramStreakBadge = nil
