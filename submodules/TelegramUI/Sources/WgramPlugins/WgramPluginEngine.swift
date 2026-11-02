@@ -138,14 +138,23 @@ public final class WgramPluginEngine {
         let storageObj = JSValue(newObjectIn: context)!
         let getStorage: @convention(block) (String, JSValue) -> JSValue = { key, defaultVal in
             let fullKey = "wgram_plugin_\(plugin.id)_\(key)"
-            if let val = UserDefaults.standard.string(forKey: fullKey) {
-                return JSValue(object: val, in: context)
+            if let obj = UserDefaults.standard.object(forKey: fullKey) {
+                if let boolVal = obj as? Bool {
+                    return JSValue(object: boolVal ? "true" : "false", in: context)
+                } else if let numVal = obj as? NSNumber {
+                    return JSValue(object: numVal.stringValue, in: context)
+                } else if let strVal = obj as? String {
+                    return JSValue(object: strVal, in: context)
+                } else {
+                    return JSValue(object: "\(obj)", in: context)
+                }
             }
             return defaultVal
         }
         let setStorage: @convention(block) (String, String) -> Void = { key, val in
             let fullKey = "wgram_plugin_\(plugin.id)_\(key)"
             UserDefaults.standard.set(val, forKey: fullKey)
+            UserDefaults.standard.synchronize()
         }
         storageObj.setValue(getStorage, forProperty: "get")
         storageObj.setValue(setStorage, forProperty: "set")

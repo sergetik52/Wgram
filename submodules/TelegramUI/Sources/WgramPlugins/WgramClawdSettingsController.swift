@@ -114,16 +114,26 @@ public func wgramClawdSettingsController(context: AccountContext) -> ViewControl
     var presentControllerImpl: ((ViewController, Any?) -> Void)?
     
     let getPref = { (key: String, defVal: String) -> String in
-        return UserDefaults.standard.string(forKey: "wgram_plugin_clawd_pet_\(key)") ?? defVal
+        if let val = UserDefaults.standard.object(forKey: "wgram_plugin_clawd_pet_\(key)") {
+            return "\(val)"
+        }
+        return defVal
     }
     let getBoolPref = { (key: String, defVal: Bool) -> Bool in
-        if let val = UserDefaults.standard.object(forKey: "wgram_plugin_clawd_pet_\(key)") as? Bool {
-            return val
+        if let val = UserDefaults.standard.object(forKey: "wgram_plugin_clawd_pet_\(key)") {
+            if let b = val as? Bool { return b }
+            if let s = val as? String { return s == "true" }
+            if let n = val as? NSNumber { return n.boolValue }
         }
         return defVal
     }
     let setPref = { (key: String, val: Any) in
-        UserDefaults.standard.set(val, forKey: "wgram_plugin_clawd_pet_\(key)")
+        if let boolVal = val as? Bool {
+            UserDefaults.standard.set(boolVal ? "true" : "false", forKey: "wgram_plugin_clawd_pet_\(key)")
+        } else {
+            UserDefaults.standard.set("\(val)", forKey: "wgram_plugin_clawd_pet_\(key)")
+        }
+        UserDefaults.standard.synchronize()
         NotificationCenter.default.post(name: NSNotification.Name("WgramClawdSettingsUpdated"), object: nil)
         statePromise.set(Int.random(in: 1...100000))
     }
