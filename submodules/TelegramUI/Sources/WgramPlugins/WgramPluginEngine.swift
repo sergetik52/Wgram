@@ -45,6 +45,7 @@ public final class WgramPluginEngine {
     private var motionManager: CMMotionManager?
     private var motionListeners: [String: JSValue] = [:]
     private var lastShakeTime: CFTimeInterval = 0
+    public private(set) var currentChatId: String = ""
     
     public var installedPlugins: [WgramPlugin] {
         return self.plugins
@@ -268,6 +269,12 @@ public final class WgramPluginEngine {
         }
         wgramObj.setValue(screenSizeHandler, forProperty: "getScreenSize")
         
+        // wgram.getCurrentChatId
+        let getCurrentChatIdHandler: @convention(block) () -> String = { [weak self] in
+            return self?.currentChatId ?? ""
+        }
+        wgramObj.setValue(getCurrentChatIdHandler, forProperty: "getCurrentChatId")
+        
         // wgram.fetch
         let fetchHandler: @convention(block) (String, JSValue?, JSValue?) -> Void = { urlString, options, callback in
             guard let url = URL(string: urlString) else {
@@ -475,6 +482,10 @@ public final class WgramPluginEngine {
     public func processOutgoingMessage(peerId: PeerId?, text: String) -> String? {
         var currentText = text
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let chatIdStr = peerId != nil ? "\(peerId!.toInt64())" : ""
+        if !chatIdStr.isEmpty {
+            self.currentChatId = chatIdStr
+        }
         
         // 1. Check custom commands (/clawd, .shrug, etc.)
         for (_, cmdMap) in self.commandHooks {
@@ -486,7 +497,7 @@ public final class WgramPluginEngine {
                 if trimmed.lowercased().hasPrefix(prefix1) || trimmed.lowercased().hasPrefix(prefix2) {
                     let usedPrefix = trimmed.lowercased().hasPrefix(prefix1) ? prefix1 : prefix2
                     let args = String(trimmed.dropFirst(usedPrefix.count)).trimmingCharacters(in: .whitespaces)
-                    let result = handler.call(withArguments: [args])
+                    let result = handler.call(withArguments: [args, chatIdStr])
                     if let resStr = result?.toString(), !result!.isUndefined && !result!.isNull, !resStr.isEmpty {
                         DispatchQueue.main.async {
                             WgramPluginEngine.showToastAlert(message: resStr)
@@ -499,7 +510,7 @@ public final class WgramPluginEngine {
         
         // 2. Check onSendMessage hooks
         for (_, hook) in self.outgoingMessageHooks {
-            if let result = hook.call(withArguments: [currentText]), !result.isUndefined && !result.isNull {
+            if let result = hook.call(withArguments: [currentText, chatIdStr]), !result.isUndefined && !result.isNull {
                 currentText = result.toString()
             }
         }
@@ -517,11 +528,15 @@ public final class WgramPluginEngine {
         }
     }
     
-    public func notifyChatOpened(title: String, isSavedMessages: Bool) {
+    public func notifyChatOpened(title: String, isSavedMessages: Bool, peerId: PeerId? = nil) {
+        let chatIdStr = peerId != nil ? "\(peerId!.toInt64())" : ""
+        if !chatIdStr.isEmpty {
+            self.currentChatId = chatIdStr
+        }
         DispatchQueue.main.async { [weak self] in
             guard let strongSelf = self else { return }
             for (_, hook) in strongSelf.chatOpenedHooks {
-                hook.call(withArguments: [title, isSavedMessages])
+                hook.call(withArguments: [title, isSavedMessages, chatIdStr])
             }
         }
     }

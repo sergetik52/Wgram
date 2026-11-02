@@ -7932,7 +7932,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         let chatPeer = self.presentationInterfaceState.renderedPeer?.chatMainPeer ?? self.presentationInterfaceState.renderedPeer?.peer
         let chatTitle = chatPeer?.debugDisplayTitle ?? ""
         let isSaved = self.chatLocation.peerId == self.context.account.peerId
-        WgramPluginEngine.shared.notifyChatOpened(title: chatTitle, isSavedMessages: isSaved)
+        WgramPluginEngine.shared.notifyChatOpened(title: chatTitle, isSavedMessages: isSaved, peerId: self.chatLocation.peerId)
         
         self.chatDisplayNode.historyNode.experimentalSnapScrollToItem = false
         self.chatDisplayNode.historyNode.canReadHistory.set(self.computedCanReadHistoryPromise.get())
