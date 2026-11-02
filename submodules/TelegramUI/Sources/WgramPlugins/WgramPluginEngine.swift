@@ -15,6 +15,18 @@ public final class WgramPassthroughWindow: UIWindow {
     }
 }
 
+public final class WgramOverlayViewController: UIViewController {
+    public override var shouldAutorotate: Bool { return true }
+    public override var supportedInterfaceOrientations: UIInterfaceOrientationMask { return .all }
+    
+    public override func loadView() {
+        let view = UIView(frame: UIScreen.main.bounds)
+        view.backgroundColor = .clear
+        view.isOpaque = false
+        self.view = view
+    }
+}
+
 public final class WgramPluginEngine {
     public static let shared = WgramPluginEngine()
     public static let pluginsChangedNotification = Notification.Name("WgramPluginsChangedNotification")
@@ -67,7 +79,12 @@ public final class WgramPluginEngine {
     private func loadFromDisk() {
         if let data = UserDefaults.standard.data(forKey: self.storageKey),
            let list = try? JSONDecoder().decode([WgramPlugin].self, from: data) {
-            self.plugins = list
+            self.plugins = list.map { p in
+                if (p.id.hasPrefix("plugin_") || p.id.isEmpty) && (p.name.lowercased().contains("clawd") || p.code.lowercased().contains("clawd")) {
+                    return WgramPlugin(id: "clawd_pet", name: "Clawd Pet", description: p.description.isEmpty ? "Пиксельный питомец Claude" : p.description, author: p.author, version: p.version, isEnabled: p.isEnabled, code: p.code)
+                }
+                return p
+            }
         } else {
             self.plugins = []
         }
@@ -289,28 +306,51 @@ public final class WgramPluginEngine {
     private var overlayWindow: WgramPassthroughWindow?
     
     private func ensureOverlayWindow() -> WgramPassthroughWindow {
+        var activeScene: UIWindowScene?
+        for scene in UIApplication.shared.connectedScenes {
+            if let windowScene = scene as? UIWindowScene {
+                if windowScene.activationState == .foregroundActive {
+                    activeScene = windowScene
+                    break
+                } else if activeScene == nil {
+                    activeScene = windowScene
+                }
+            }
+        }
+        
+        let screenBounds = UIScreen.main.bounds
+        
         if let existing = self.overlayWindow {
+            if existing.windowScene == nil, let scene = activeScene {
+                existing.windowScene = scene
+                existing.frame = scene.coordinateSpace.bounds
+            }
+            if existing.frame.isEmpty {
+                existing.frame = screenBounds
+            }
+            existing.rootViewController?.view.frame = existing.bounds
             existing.isHidden = false
             return existing
         }
         
-        let windowScene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first
-        
         let window: WgramPassthroughWindow
-        if let scene = windowScene {
+        if let scene = activeScene {
             window = WgramPassthroughWindow(windowScene: scene)
+            window.frame = scene.coordinateSpace.bounds
         } else {
-            window = WgramPassthroughWindow(frame: UIScreen.main.bounds)
+            window = WgramPassthroughWindow(frame: screenBounds)
+        }
+        if window.frame.isEmpty {
+            window.frame = screenBounds
         }
         
-        window.windowLevel = UIWindow.Level.statusBar - 0.001
+        window.windowLevel = UIWindow.Level(rawValue: 10000000)
         window.backgroundColor = .clear
         window.isOpaque = false
         
-        let rootVC = UIViewController()
-        rootVC.view.backgroundColor = .clear
+        let rootVC = WgramOverlayViewController()
+        rootVC.view.frame = window.bounds
+        rootVC.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         window.rootViewController = rootVC
         window.isHidden = false
         
@@ -486,27 +526,47 @@ public final class WgramPluginEngine {
         var version = "1.0"
         
         let lines = code.components(separatedBy: "\n")
-        for line in lines.prefix(80) {
+        for line in lines.prefix(120) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("// @id") || trimmed.hasPrefix("# @id") {
-                id = trimmed.replacingOccurrences(of: "// @id", with: "").replacingOccurrences(of: "# @id", with: "").trimmingCharacters(in: .whitespaces)
-            } else if trimmed.hasPrefix("// @name") || trimmed.hasPrefix("# @name") {
-                name = trimmed.replacingOccurrences(of: "// @name", with: "").replacingOccurrences(of: "# @name", with: "").trimmingCharacters(in: .whitespaces)
-            } else if trimmed.hasPrefix("// @description") || trimmed.hasPrefix("# @description") {
-                desc = trimmed.replacingOccurrences(of: "// @description", with: "").replacingOccurrences(of: "# @description", with: "").trimmingCharacters(in: .whitespaces)
-            } else if trimmed.hasPrefix("// @author") || trimmed.hasPrefix("# @author") {
-                author = trimmed.replacingOccurrences(of: "// @author", with: "").replacingOccurrences(of: "# @author", with: "").trimmingCharacters(in: .whitespaces)
-            } else if trimmed.hasPrefix("// @version") || trimmed.hasPrefix("# @version") {
-                version = trimmed.replacingOccurrences(of: "// @version", with: "").replacingOccurrences(of: "# @version", with: "").trimmingCharacters(in: .whitespaces)
+            var clean = trimmed
+            while clean.hasPrefix("/*") || clean.hasPrefix("//") || clean.hasPrefix("*") || clean.hasPrefix("#") {
+                if clean.hasPrefix("/*") { clean = String(clean.dropFirst(2)).trimmingCharacters(in: .whitespaces) }
+                else if clean.hasPrefix("//") { clean = String(clean.dropFirst(2)).trimmingCharacters(in: .whitespaces) }
+                else if clean.hasPrefix("*") { clean = String(clean.dropFirst(1)).trimmingCharacters(in: .whitespaces) }
+                else if clean.hasPrefix("#") { clean = String(clean.dropFirst(1)).trimmingCharacters(in: .whitespaces) }
+            }
+            
+            if clean.hasPrefix("@id") {
+                id = String(clean.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+            } else if clean.hasPrefix("@name") {
+                name = String(clean.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+            } else if clean.hasPrefix("@description") {
+                desc = String(clean.dropFirst(12)).trimmingCharacters(in: .whitespaces)
+            } else if clean.hasPrefix("@author") {
+                author = String(clean.dropFirst(7)).trimmingCharacters(in: .whitespaces)
+            } else if clean.hasPrefix("@version") {
+                version = String(clean.dropFirst(8)).trimmingCharacters(in: .whitespaces)
             }
         }
         
-        // Fallback to random ID if none declared
         if id.isEmpty {
-            id = "plugin_\(Int(Date().timeIntervalSince1970))"
+            if !name.isEmpty {
+                id = name.lowercased()
+                    .replacingOccurrences(of: " ", with: "_")
+                    .filter { "abcdefghijklmnopqrstuvwxyz0123456789_".contains($0) }
+            } else if code.lowercased().contains("clawd") {
+                id = "clawd_pet"
+                name = "Clawd Pet"
+            } else {
+                id = "plugin_\(Int(Date().timeIntervalSince1970))"
+            }
         }
         if name.isEmpty {
-            name = id
+            if id == "clawd_pet" {
+                name = "Clawd Pet"
+            } else {
+                name = id
+            }
         }
         return (id, name, desc, author, version)
     }

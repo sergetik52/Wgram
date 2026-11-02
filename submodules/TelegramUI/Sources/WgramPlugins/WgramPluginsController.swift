@@ -183,7 +183,7 @@ public func wgramPluginsController(context: AccountContext) -> ViewController {
                 ActionSheetTextItem(title: "\(plugin.name) v\(plugin.version)\n\n\(plugin.description)\n\nАвтор: \(plugin.author.isEmpty ? "Не указан" : plugin.author)")
             ]
             
-            if plugin.id == "clawd_pet" || plugin.id.contains("clawd") {
+            if plugin.id.lowercased().contains("clawd") || plugin.name.lowercased().contains("clawd") {
                 items.append(ActionSheetButtonItem(title: "Настройки питомца ⚙️", color: .accent, action: { [weak actionSheet] in
                     actionSheet?.dismissAnimated()
                     pushControllerImpl?(wgramClawdSettingsController(context: context))
