@@ -52,74 +52,59 @@ private enum WgramClawdSection: Int32 {
     case ai
 }
 
-private enum WgramClawdEntryStableId: Hashable {
-    case header(Int32)
-    case item(String)
-}
-
 private enum WgramClawdEntry: ItemListNodeEntry {
     case header(Int32, PresentationTheme, String)
-    case disclosureItem(Int32, String, PresentationTheme, String, String, () -> Void)
-    case switchItem(Int32, String, PresentationTheme, String, Bool, (Bool) -> Void)
-    case actionItem(Int32, String, PresentationTheme, String, ItemListActionKind, () -> Void)
-    case textItem(Int32, String, PresentationTheme, String, String)
+    case disclosureItem(Int32, PresentationTheme, String, String, () -> Void)
+    case switchItem(Int32, PresentationTheme, String, Bool, (Bool) -> Void)
+    case actionItem(Int32, PresentationTheme, String, ItemListActionKind, () -> Void)
     
     var section: ItemListSectionId {
         switch self {
-        case let .header(sec, _, _): return sec
-        case let .disclosureItem(sec, _, _, _, _, _): return sec
-        case let .switchItem(sec, _, _, _, _, _): return sec
-        case let .actionItem(sec, _, _, _, _, _): return sec
-        case let .textItem(sec, _, _, _, _): return sec
+        case let .header(index, _, _): return index / 100
+        case let .disclosureItem(index, _, _, _, _): return index / 100
+        case let .switchItem(index, _, _, _, _): return index / 100
+        case let .actionItem(index, _, _, _, _): return index / 100
         }
     }
     
-    var stableId: WgramClawdEntryStableId {
+    var stableId: Int32 {
         switch self {
-        case let .header(sec, _, title): return .header(sec * 1000 + Int32(title.hashValue))
-        case let .disclosureItem(_, id, _, _, _, _): return .item(id)
-        case let .switchItem(_, id, _, _, _, _): return .item(id)
-        case let .actionItem(_, id, _, _, _, _): return .item(id)
-        case let .textItem(_, id, _, _, _): return .item(id)
+        case let .header(index, _, _): return index
+        case let .disclosureItem(index, _, _, _, _): return index
+        case let .switchItem(index, _, _, _, _): return index
+        case let .actionItem(index, _, _, _, _): return index
         }
     }
     
     static func ==(lhs: WgramClawdEntry, rhs: WgramClawdEntry) -> Bool {
         switch (lhs, rhs) {
-        case let (.header(s1, t1, text1), .header(s2, t2, text2)):
-            return s1 == s2 && t1 === t2 && text1 == text2
-        case let (.disclosureItem(s1, id1, t1, title1, val1, _), .disclosureItem(s2, id2, t2, title2, val2, _)):
-            return s1 == s2 && id1 == id2 && t1 === t2 && title1 == title2 && val1 == val2
-        case let (.switchItem(s1, id1, t1, title1, val1, _), .switchItem(s2, id2, t2, title2, val2, _)):
-            return s1 == s2 && id1 == id2 && t1 === t2 && title1 == title2 && val1 == val2
-        case let (.actionItem(s1, id1, t1, title1, kind1, _), .actionItem(s2, id2, t2, title2, kind2, _)):
-            return s1 == s2 && id1 == id2 && t1 === t2 && title1 == title2 && kind1 == kind2
-        case let (.textItem(s1, id1, t1, title1, val1), .textItem(s2, id2, t2, title2, val2)):
-            return s1 == s2 && id1 == id2 && t1 === t2 && title1 == title2 && val1 == val2
+        case let (.header(i1, t1, text1), .header(i2, t2, text2)):
+            return i1 == i2 && t1 === t2 && text1 == text2
+        case let (.disclosureItem(i1, t1, title1, val1, _), .disclosureItem(i2, t2, title2, val2, _)):
+            return i1 == i2 && t1 === t2 && title1 == title2 && val1 == val2
+        case let (.switchItem(i1, t1, title1, val1, _), .switchItem(i2, t2, title2, val2, _)):
+            return i1 == i2 && t1 === t2 && title1 == title2 && val1 == val2
+        case let (.actionItem(i1, t1, title1, kind1, _), .actionItem(i2, t2, title2, kind2, _)):
+            return i1 == i2 && t1 === t2 && title1 == title2 && kind1 == kind2
         default:
             return false
         }
     }
     
     static func <(lhs: WgramClawdEntry, rhs: WgramClawdEntry) -> Bool {
-        if lhs.section != rhs.section {
-            return lhs.section < rhs.section
-        }
-        return lhs.stableId.hashValue < rhs.stableId.hashValue
+        return lhs.stableId < rhs.stableId
     }
     
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         switch self {
         case let .header(_, _, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
-        case let .disclosureItem(_, _, _, title, value, action):
+        case let .disclosureItem(_, _, title, value, action):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: self.section, style: .blocks, action: action)
-        case let .switchItem(_, _, _, title, value, updated):
+        case let .switchItem(_, _, title, value, updated):
             return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: updated)
-        case let .actionItem(_, _, _, title, kind, action):
+        case let .actionItem(_, _, title, kind, action):
             return ItemListActionItem(presentationData: presentationData, title: title, kind: kind, alignment: .natural, sectionId: self.section, style: .blocks, action: action)
-        case let .textItem(_, _, _, title, value):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: self.section, style: .blocks, action: nil)
         }
     }
 }
@@ -280,64 +265,71 @@ public func wgramClawdSettingsController(context: AccountContext) -> ViewControl
         let sleepIdx = Int(getPref("sleep", "1")) ?? 1
         let sleepName = (sleepIdx >= 0 && sleepIdx < sleeps.count) ? sleeps[sleepIdx] : "Через 3 мин"
         
-        // 1. ВНЕШНИЙ ВИД
-        entries.append(.header(WgramClawdSection.appearance.rawValue, presentationData.theme, "ВНЕШНИЙ ВИД"))
-        entries.append(.disclosureItem(WgramClawdSection.appearance.rawValue, "color", presentationData.theme, "Окрас", colorName, {
+        var index: Int32 = 0
+        
+        // 1. ВНЕШНИЙ ВИД (section 0)
+        index = 0
+        entries.append(.header(index, presentationData.theme, "ВНЕШНИЙ ВИД")); index += 1
+        entries.append(.disclosureItem(index, presentationData.theme, "Окрас", colorName, {
             arguments.selectColor()
-        }))
-        entries.append(.disclosureItem(WgramClawdSection.appearance.rawValue, "size", presentationData.theme, "Размер", sizeName, {
+        })); index += 1
+        entries.append(.disclosureItem(index, presentationData.theme, "Размер", sizeName, {
             arguments.selectSize()
-        }))
+        })); index += 1
         
-        // 2. ПОВЕДЕНИЕ
-        entries.append(.header(WgramClawdSection.behavior.rawValue, presentationData.theme, "ПОВЕДЕНИЕ"))
-        entries.append(.switchItem(WgramClawdSection.behavior.rawValue, "gravity", presentationData.theme, "Гравитация", getBoolPref("gravity", false), { val in
+        // 2. ПОВЕДЕНИЕ (section 1: 100+)
+        index = 100
+        entries.append(.header(index, presentationData.theme, "ПОВЕДЕНИЕ")); index += 1
+        entries.append(.switchItem(index, presentationData.theme, "Гравитация", getBoolPref("gravity", false), { val in
             arguments.updateSetting("gravity", val)
-        }))
-        entries.append(.switchItem(WgramClawdSection.behavior.rawValue, "wander", presentationData.theme, "Гуляет сам", getBoolPref("wander", true), { val in
+        })); index += 1
+        entries.append(.switchItem(index, presentationData.theme, "Гуляет сам", getBoolPref("wander", true), { val in
             arguments.updateSetting("wander", val)
-        }))
-        entries.append(.switchItem(WgramClawdSection.behavior.rawValue, "phrases", presentationData.theme, "Разговаривает", getBoolPref("phrases", true), { val in
+        })); index += 1
+        entries.append(.switchItem(index, presentationData.theme, "Разговаривает", getBoolPref("phrases", true), { val in
             arguments.updateSetting("phrases", val)
-        }))
-        entries.append(.switchItem(WgramClawdSection.behavior.rawValue, "eat", presentationData.theme, "Ест кнопки интерфейса", getBoolPref("eat", true), { val in
+        })); index += 1
+        entries.append(.switchItem(index, presentationData.theme, "Ест кнопки интерфейса", getBoolPref("eat", true), { val in
             arguments.updateSetting("eat", val)
-        }))
-        entries.append(.switchItem(WgramClawdSection.behavior.rawValue, "poop", presentationData.theme, "Оставляет кучки", getBoolPref("poop", true), { val in
+        })); index += 1
+        entries.append(.switchItem(index, presentationData.theme, "Оставляет кучки", getBoolPref("poop", true), { val in
             arguments.updateSetting("poop", val)
-        }))
-        entries.append(.switchItem(WgramClawdSection.behavior.rawValue, "shake", presentationData.theme, "Чувствует тряску", getBoolPref("shake", true), { val in
+        })); index += 1
+        entries.append(.switchItem(index, presentationData.theme, "Чувствует тряску", getBoolPref("shake", true), { val in
             arguments.updateSetting("shake", val)
-        }))
-        entries.append(.disclosureItem(WgramClawdSection.behavior.rawValue, "sleep", presentationData.theme, "Засыпает", sleepName, {
+        })); index += 1
+        entries.append(.disclosureItem(index, presentationData.theme, "Засыпает", sleepName, {
             arguments.selectSleep()
-        }))
+        })); index += 1
         
-        // 3. УПРАВЛЕНИЕ
-        entries.append(.header(WgramClawdSection.actions.rawValue, presentationData.theme, "УПРАВЛЕНИЕ"))
-        entries.append(.actionItem(WgramClawdSection.actions.rawValue, "recenter", presentationData.theme, "Позвать в центр экрана", .generic, {
+        // 3. УПРАВЛЕНИЕ (section 2: 200+)
+        index = 200
+        entries.append(.header(index, presentationData.theme, "УПРАВЛЕНИЕ")); index += 1
+        entries.append(.actionItem(index, presentationData.theme, "Позвать в центр экрана", .generic, {
             arguments.recenterPet()
-        }))
-        entries.append(.actionItem(WgramClawdSection.actions.rawValue, "spit", presentationData.theme, "Вернуть все съеденные кнопки", .generic, {
+        })); index += 1
+        entries.append(.actionItem(index, presentationData.theme, "Вернуть все съеденные кнопки", .generic, {
             arguments.spitAll()
-        }))
+        })); index += 1
         
-        // 4. ИИ-РЕПЛИКИ
-        entries.append(.header(WgramClawdSection.ai.rawValue, presentationData.theme, "ИИ-РЕПЛИКИ"))
+        // 4. ИИ-РЕПЛИКИ (section 3: 300+)
+        index = 300
+        entries.append(.header(index, presentationData.theme, "ИИ-РЕПЛИКИ")); index += 1
         let aiEnabled = getBoolPref("ai_enabled", false)
-        entries.append(.switchItem(WgramClawdSection.ai.rawValue, "ai_enabled", presentationData.theme, "Отвечать через ИИ", aiEnabled, { val in
+        entries.append(.switchItem(index, presentationData.theme, "Отвечать через ИИ", aiEnabled, { val in
             arguments.updateSetting("ai_enabled", val)
-        }))
+        })); index += 1
         let keyMask = getPref("ai_key", "").isEmpty ? "Не задан" : "••••••••"
-        entries.append(.disclosureItem(WgramClawdSection.ai.rawValue, "ai_key", presentationData.theme, "API-ключ Gemini", keyMask, {
+        entries.append(.disclosureItem(index, presentationData.theme, "API-ключ Gemini", keyMask, {
             arguments.editApiKey()
-        }))
+        })); index += 1
         
-        // 5. МОЗГ И ПАМЯТЬ
-        entries.append(.header(WgramClawdSection.brain.rawValue, presentationData.theme, "МОЗГ И ПАМЯТЬ"))
-        entries.append(.actionItem(WgramClawdSection.brain.rawValue, "forget", presentationData.theme, "Забыть всё", .destructive, {
+        // 5. МОЗГ И ПАМЯТЬ (section 4: 400+)
+        index = 400
+        entries.append(.header(index, presentationData.theme, "МОЗГ И ПАМЯТЬ")); index += 1
+        entries.append(.actionItem(index, presentationData.theme, "Забыть всё", .destructive, {
             arguments.forgetBrain()
-        }))
+        })); index += 1
         
         let controllerState = ItemListControllerState(
             presentationData: ItemListPresentationData(presentationData),

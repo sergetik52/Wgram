@@ -294,7 +294,7 @@ public func wgramPluginsController(context: AccountContext) -> ViewController {
         }
     }
     pushControllerImpl = { [weak controller] c in
-        (controller?.navigationController as? NavigationController)?.pushViewController(c)
+        controller?.push(c)
     }
     
     let _ = NotificationCenter.default.addObserver(forName: WgramPluginEngine.pluginsChangedNotification, object: nil, queue: .main) { _ in
