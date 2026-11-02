@@ -6,7 +6,9 @@ import CoreMotion
 @objc public protocol WgramFloatingWidgetJSExport: JSExport {
     func setPosition(_ x: Double, _ y: Double)
     func getPosition() -> [String: Double]
+    func getVelocity() -> [String: Double]
     func setSize(_ width: Double, _ height: Double)
+    func setRotation(_ degrees: Double)
     func drawRect(_ x: Double, _ y: Double, _ width: Double, _ height: Double, _ colorHex: String)
     func clear()
     func redraw()
@@ -15,6 +17,9 @@ import CoreMotion
     func setPhysicsEnabled(_ enabled: Bool)
     func setVelocity(_ vx: Double, _ vy: Double)
     func setGravity(_ gx: Double, _ gy: Double)
+    func spawnParticle(_ kind: String, _ x: Double, _ y: Double)
+    func createPoop(_ x: Double, _ y: Double, _ onClick: JSValue)
+    func removePoops()
     func destroy()
     
     var onTick: JSValue? { get set }
@@ -28,6 +33,7 @@ public final class WgramFloatingWidget: UIView, WgramFloatingWidgetJSExport, UIG
     public var onDraw: JSValue?
     
     private var pixelRects: [(rect: CGRect, color: UIColor)] = []
+    private var poopViews: [UIView] = []
     private var displayLink: CADisplayLink?
     private var lastTimestamp: CFTimeInterval = 0
     
@@ -235,11 +241,22 @@ public final class WgramFloatingWidget: UIView, WgramFloatingWidgetJSExport, UIG
         return ["x": Double(self.frame.origin.x), "y": Double(self.frame.origin.y)]
     }
     
+    public func getVelocity() -> [String: Double] {
+        return ["vx": Double(self.velocity.x), "vy": Double(self.velocity.y)]
+    }
+    
     public func setSize(_ width: Double, _ height: Double) {
         DispatchQueue.main.async { [weak self] in
             guard let strongSelf = self else { return }
             strongSelf.frame.size = CGSize(width: CGFloat(width), height: CGFloat(height))
             strongSelf.setNeedsDisplay()
+        }
+    }
+    
+    public func setRotation(_ degrees: Double) {
+        DispatchQueue.main.async { [weak self] in
+            let rad = CGFloat(degrees * .pi / 180.0)
+            self?.transform = CGAffineTransform(rotationAngle: rad)
         }
     }
     
@@ -274,6 +291,48 @@ public final class WgramFloatingWidget: UIView, WgramFloatingWidgetJSExport, UIG
     public func setGravity(_ gx: Double, _ gy: Double) {
         DispatchQueue.main.async { [weak self] in
             self?.gravity = CGPoint(x: CGFloat(gx), y: CGFloat(gy))
+        }
+    }
+    
+    public func spawnParticle(_ kind: String, _ x: Double, _ y: Double) {
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self, let superview = strongSelf.superview else { return }
+            let particle = WgramParticleView(kind: kind)
+            let px = x > 0 ? CGFloat(x) : strongSelf.frame.midX + CGFloat.random(in: -12...12)
+            let py = y > 0 ? CGFloat(y) : strongSelf.frame.minY - 12.0
+            particle.center = CGPoint(x: px, y: py)
+            superview.addSubview(particle)
+            
+            let driftX = CGFloat.random(in: -18...18)
+            let driftY: CGFloat = kind == "zzz" ? -55.0 : -45.0
+            let duration: TimeInterval = kind == "zzz" ? 1.6 : 1.1
+            
+            UIView.animate(withDuration: duration, delay: 0, options: [.curveEaseOut], animations: {
+                particle.center = CGPoint(x: particle.center.x + driftX, y: particle.center.y + driftY)
+                particle.alpha = 0.0
+                particle.transform = CGAffineTransform(scaleX: 1.25, y: 1.25)
+            }) { _ in
+                particle.removeFromSuperview()
+            }
+        }
+    }
+    
+    public func createPoop(_ x: Double, _ y: Double, _ onClick: JSValue) {
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self, let superview = strongSelf.superview else { return }
+            let poop = WgramPoopView(x: CGFloat(x), y: CGFloat(y), onClick: onClick, widget: strongSelf)
+            superview.insertSubview(poop, belowSubview: strongSelf)
+            strongSelf.poopViews.append(poop)
+        }
+    }
+    
+    public func removePoops() {
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self else { return }
+            for p in strongSelf.poopViews {
+                p.removeFromSuperview()
+            }
+            strongSelf.poopViews.removeAll()
         }
     }
     
@@ -337,7 +396,157 @@ public final class WgramFloatingWidget: UIView, WgramFloatingWidgetJSExport, UIG
             self?.speechDismissTimer?.invalidate()
             self?.speechBubbleView?.removeFromSuperview()
             self?.speechBubbleView = nil
+            self?.removePoops()
             self?.removeFromSuperview()
+        }
+    }
+}
+
+// MARK: - Pixel Particle View
+public final class WgramParticleView: UIView {
+    private let kind: String
+    
+    private static let patterns: [String: [String]] = [
+        "heart": [
+            ".XX.XX.",
+            "XXXXXXX",
+            "XXXXXXX",
+            ".XXXXX.",
+            "..XXX..",
+            "...X..."
+        ],
+        "zzz": [
+            "XXXXX",
+            "...X.",
+            "..X..",
+            ".X...",
+            "XXXXX"
+        ],
+        "spark": [
+            "..X..",
+            "..X..",
+            "XX.XX",
+            "..X..",
+            "..X.."
+        ],
+        "note": [
+            "..XXXXX",
+            "..X...X",
+            "..X...X",
+            "..X...X",
+            "XXX.XXX",
+            "XXX.XXX"
+        ],
+        "poop": [
+            "....X....",
+            "...XXo...",
+            "..XXXXX..",
+            ".XXXXXXo.",
+            ".XwkXwkX.",
+            "XXXXXXXXo",
+            "XXXXXXXXX"
+        ]
+    ]
+    
+    private static let colors: [String: UIColor] = [
+        "heart": UIColor(hexString: "FF5C7A"),
+        "zzz": UIColor(hexString: "8FA3BF"),
+        "spark": UIColor(hexString: "FFC94D"),
+        "note": UIColor(hexString: "6FB8FF"),
+        "X": UIColor(hexString: "8A5A33"),
+        "o": UIColor(hexString: "B27D4E"),
+        "w": UIColor(hexString: "FFFFFF"),
+        "k": UIColor(hexString: "1A1A1A")
+    ]
+    
+    public init(kind: String) {
+        self.kind = kind
+        let rows = WgramParticleView.patterns[kind] ?? WgramParticleView.patterns["spark"]!
+        let s: CGFloat = kind == "poop" ? 4.0 : 3.0
+        let w = CGFloat(rows[0].count) * s
+        let h = CGFloat(rows.count) * s
+        super.init(frame: CGRect(x: 0, y: 0, width: w, height: h))
+        self.backgroundColor = .clear
+        self.isOpaque = false
+        self.isUserInteractionEnabled = false
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    public override func draw(_ rect: CGRect) {
+        guard let ctx = UIGraphicsGetCurrentContext() else { return }
+        guard let rows = WgramParticleView.patterns[self.kind] else { return }
+        let s: CGFloat = self.kind == "poop" ? 4.0 : 3.0
+        
+        for (y, row) in rows.enumerated() {
+            for (x, ch) in row.enumerated() {
+                let charStr = String(ch)
+                if charStr == "." { continue }
+                let color: UIColor
+                if self.kind == "poop" {
+                    color = WgramParticleView.colors[charStr] ?? UIColor.brown
+                } else {
+                    color = WgramParticleView.colors[self.kind] ?? UIColor.white
+                }
+                ctx.setFillColor(color.cgColor)
+                ctx.fill(CGRect(x: CGFloat(x) * s, y: CGFloat(y) * s, width: s, height: s))
+            }
+        }
+    }
+}
+
+// MARK: - Interactive Poop View
+public final class WgramPoopView: UIView {
+    private let particleView = WgramParticleView(kind: "poop")
+    private let onClick: JSValue
+    private weak var widget: WgramFloatingWidget?
+    
+    public init(x: CGFloat, y: CGFloat, onClick: JSValue, widget: WgramFloatingWidget) {
+        self.onClick = onClick
+        self.widget = widget
+        let size = CGSize(width: 44.0, height: 44.0)
+        super.init(frame: CGRect(origin: CGPoint(x: x, y: y), size: size))
+        self.backgroundColor = .clear
+        self.isUserInteractionEnabled = true
+        
+        self.particleView.center = CGPoint(x: 22.0, y: 22.0)
+        self.addSubview(self.particleView)
+        
+        let tap = UITapGestureRecognizer(target: self, action: #selector(self.handleTap))
+        self.addGestureRecognizer(tap)
+        
+        self.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
+        UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0.8, options: [], animations: {
+            self.transform = .identity
+        })
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    @objc private func handleTap() {
+        self.isUserInteractionEnabled = false
+        let feedback = UIImpactFeedbackGenerator(style: .medium)
+        feedback.impactOccurred()
+        
+        if let widget = self.widget {
+            widget.spawnParticle("spark", Double(self.center.x), Double(self.center.y))
+            widget.spawnParticle("spark", Double(self.center.x - 8), Double(self.center.y - 8))
+            widget.spawnParticle("spark", Double(self.center.x + 8), Double(self.center.y - 8))
+        }
+        
+        UIView.animate(withDuration: 0.25, animations: {
+            self.transform = CGAffineTransform(rotationAngle: .pi / 2).scaledBy(x: 0.01, y: 0.01)
+            self.alpha = 0
+        }) { [weak self] _ in
+            guard let strongSelf = self else { return }
+            DispatchQueue.main.async {
+                strongSelf.onClick.call(withArguments: [])
+            }
+            strongSelf.removeFromSuperview()
         }
     }
 }

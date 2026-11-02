@@ -167,6 +167,44 @@ public final class WgramPluginEngine {
         wgramObj.setValue(startMotionHandler, forProperty: "startMotion")
         wgramObj.setValue(stopMotionHandler, forProperty: "stopMotion")
         
+        // wgram.haptic
+        let hapticHandler: @convention(block) (String) -> Void = { type in
+            DispatchQueue.main.async {
+                switch type {
+                case "light":
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                case "medium":
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                case "heavy":
+                    UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                case "success":
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                case "warning":
+                    UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                case "error":
+                    UINotificationFeedbackGenerator().notificationOccurred(.error)
+                default:
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
+            }
+        }
+        wgramObj.setValue(hapticHandler, forProperty: "haptic")
+        
+        // wgram.getScreenSize
+        let screenSizeHandler: @convention(block) () -> [String: Double] = {
+            let bounds = UIScreen.main.bounds
+            let insets = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first?.windows.first?.safeAreaInsets ?? .zero
+            return [
+                "width": Double(bounds.width),
+                "height": Double(bounds.height),
+                "safeTop": Double(insets.top),
+                "safeBottom": Double(insets.bottom)
+            ]
+        }
+        wgramObj.setValue(screenSizeHandler, forProperty: "getScreenSize")
+        
         // wgram.fetch
         let fetchHandler: @convention(block) (String, JSValue?, JSValue?) -> Void = { urlString, options, callback in
             guard let url = URL(string: urlString) else {
@@ -177,11 +215,19 @@ public final class WgramPluginEngine {
             if let method = options?.forProperty("method")?.toString() {
                 request.httpMethod = method
             }
+            if let headers = options?.forProperty("headers")?.toDictionary() as? [String: String] {
+                for (k, v) in headers {
+                    request.setValue(v, forHTTPHeaderField: k)
+                }
+            }
             if let body = options?.forProperty("body")?.toString() {
                 request.httpBody = body.data(using: .utf8)
             }
             URLSession.shared.dataTask(with: request) { data, response, error in
                 let respObj = JSValue(newObjectIn: context)!
+                if let httpResp = response as? HTTPURLResponse {
+                    respObj.setValue(httpResp.statusCode, forProperty: "status")
+                }
                 if let err = error {
                     respObj.setValue(err.localizedDescription, forProperty: "error")
                 } else if let d = data, let text = String(data: d, encoding: .utf8) {
