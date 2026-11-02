@@ -2586,8 +2586,40 @@ private final class NotificationServiceHandler {
                                     
                                     var removeIdentifiers: [String] = []
                                     for notification in notifications {
-                                        if let peerIdString = notification.request.content.userInfo["peerId"] as? String, let peerIdValue = Int64(peerIdString), let messageIdString = notification.request.content.userInfo["msg_id"] as? String, let messageIdValue = Int32(messageIdString) {
-                                            if PeerId(peerIdValue) == id.peerId && messageIdValue <= id.id {
+                                        var notificationPeerId: PeerId?
+                                        var notificationMessageId: Int32?
+                                        let userInfo = notification.request.content.userInfo
+                                        if let peerIdString = userInfo["peerId"] as? String, let peerIdValue = Int64(peerIdString) {
+                                            notificationPeerId = PeerId(peerIdValue)
+                                        } else if let fromId = userInfo["from_id"] as? String, let fromIdValue = Int64(fromId) {
+                                            notificationPeerId = PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(fromIdValue))
+                                        } else if let chatId = userInfo["chat_id"] as? String, let chatIdValue = Int64(chatId) {
+                                            notificationPeerId = PeerId(namespace: Namespaces.Peer.CloudGroup, id: PeerId.Id._internalFromInt64Value(chatIdValue))
+                                        } else if let channelId = userInfo["channel_id"] as? String, let channelIdValue = Int64(channelId) {
+                                            notificationPeerId = PeerId(namespace: Namespaces.Peer.CloudChannel, id: PeerId.Id._internalFromInt64Value(channelIdValue))
+                                        }
+                                        
+                                        if let msgId = userInfo["msg_id"] {
+                                            if let msgIdString = msgId as? String {
+                                                notificationMessageId = Int32(msgIdString)
+                                            } else if let msgIdNum = msgId as? NSNumber {
+                                                notificationMessageId = msgIdNum.int32Value
+                                            }
+                                        }
+                                        
+                                        if notificationPeerId == nil || notificationMessageId == nil {
+                                            let identifier = notification.request.identifier
+                                            if identifier.hasPrefix("m") {
+                                                let parts = identifier.dropFirst().components(separatedBy: ":")
+                                                if parts.count >= 3, let pId = Int64(parts[0]), let mId = Int32(parts[2].components(separatedBy: "_")[0]) {
+                                                    notificationPeerId = PeerId(pId)
+                                                    notificationMessageId = mId
+                                                }
+                                            }
+                                        }
+                                        
+                                        if let notificationPeerId = notificationPeerId, let notificationMessageId = notificationMessageId {
+                                            if notificationPeerId == id.peerId && notificationMessageId <= id.id {
                                                 removeIdentifiers.append(notification.request.identifier)
                                             }
                                         }

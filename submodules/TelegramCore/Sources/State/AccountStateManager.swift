@@ -1186,6 +1186,13 @@ public final class AccountStateManager {
                             if !events.updatedIncomingThreadReadStates.isEmpty || !events.updatedOutgoingThreadReadStates.isEmpty {
                                 strongSelf.threadReadStateUpdatesPipe.putNext((events.updatedIncomingThreadReadStates, events.updatedOutgoingThreadReadStates))
                             }
+                            if !events.readInboxCloudMessageIds.isEmpty {
+                                var readMessageIds: [MessageId] = []
+                                for (peerId, maxId) in events.readInboxCloudMessageIds {
+                                    readMessageIds.append(MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: maxId))
+                                }
+                                strongSelf.notifyAppliedIncomingReadMessages(readMessageIds)
+                            }
                             if !events.sentScheduledMessageIds.isEmpty {
                                 strongSelf.sentScheduledMessageIdsPipe.putNext(events.sentScheduledMessageIds)
                             }

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftSignalKit
+import Postbox
 import TelegramCore
 
 private let messageNotificationKeyExpr = try? NSRegularExpression(pattern: "m([-\\d]+):([-\\d]+):([-\\d]+)_?", options: [])
@@ -100,11 +101,43 @@ public final class ClearNotificationsManager {
             self.ids[id.peerId] = id
         }
         self.timer?.invalidate()
-        let timer = SwiftSignalKit.Timer(timeout: 2.0, repeat: false, completion: { [weak self] in
+        let timer = SwiftSignalKit.Timer(timeout: 0.3, repeat: false, completion: { [weak self] in
             self?.commitNow()
         }, queue: Queue.mainQueue())
         self.timer = timer
         timer.start()
+    }
+    
+    public func clearReadNotifications(postbox: Postbox) {
+        self.getNotificationIds(ClearNotificationIdsCompletion { [weak self] result in
+            let _ = (postbox.transaction { transaction -> [String] in
+                var removeKeys: [String] = []
+                for (identifier, requestId) in result {
+                    if case let .messageId(messageId) = requestId {
+                        if let combinedState = transaction.getCombinedPeerReadState(messageId.peerId) {
+                            for (_, state) in combinedState.states {
+                                switch state {
+                                case let .idBased(maxIncomingReadId, _, _, _, _):
+                                    if messageId.id <= maxIncomingReadId {
+                                        removeKeys.append(identifier)
+                                    }
+                                case let .indexBased(maxIncomingReadIndex, _, _, _):
+                                    if messageId.id <= maxIncomingReadIndex.id.id {
+                                        removeKeys.append(identifier)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return removeKeys
+            }
+            |> deliverOnMainQueue).start(next: { [weak self] removeKeys in
+                if let strongSelf = self, !removeKeys.isEmpty {
+                    strongSelf.removeNotificationIds(removeKeys)
+                }
+            })
+        })
     }
     
     public func commitNow() {

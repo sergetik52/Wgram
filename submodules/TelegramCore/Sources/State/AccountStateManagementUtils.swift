@@ -6559,6 +6559,7 @@ func replayFinalState(
         addedConferenceInvitationMessagesIds: addedConferenceInvitationMessagesIds,
         updatedStarGiftAuctionState: updatedStarGiftAuctionState,
         updatedStarGiftAuctionMyState: updatedStarGiftAuctionMyState,
-        updatedEmojiGameInfo: updatedEmojiGameInfo
+        updatedEmojiGameInfo: updatedEmojiGameInfo,
+        readInboxCloudMessageIds: readInboxCloudMessageIds
     )
 }

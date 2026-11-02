@@ -1034,6 +1034,7 @@ static CGFloat angleOffsetFromPortraitOrientationToOrientation(AVCaptureVideoOri
         [audioOutput setSampleBufferDelegate:self queue:_audioDataOutputQueue];
         [_captureSession addOutput:audioOutput];
         _audioOutput = audioOutput;
+        _audioConnection = [_audioOutput connectionWithMediaType:AVMediaTypeAudio];
     }
 }
 

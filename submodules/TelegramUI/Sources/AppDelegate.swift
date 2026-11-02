@@ -472,21 +472,39 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                             var notificationRequestId: NotificationManagedNotificationRequestId?
                             
                             var peerId: PeerId?
-                            if let fromId = payload["from_id"] {
-                                let fromIdValue = fromId as! NSString
-                                peerId = PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(Int64(fromIdValue as String) ?? 0))
-                            } else if let fromId = payload["chat_id"] {
-                                let fromIdValue = fromId as! NSString
-                                peerId = PeerId(namespace: Namespaces.Peer.CloudGroup, id: PeerId.Id._internalFromInt64Value(Int64(fromIdValue as String) ?? 0))
-                            } else if let fromId = payload["channel_id"] {
-                                let fromIdValue = fromId as! NSString
-                                peerId = PeerId(namespace: Namespaces.Peer.CloudChannel, id: PeerId.Id._internalFromInt64Value(Int64(fromIdValue as String) ?? 0))
+                            if let peerIdVal = payload["peerId"] {
+                                if let str = peerIdVal as? String, let intVal = Int64(str) {
+                                    peerId = PeerId(intVal)
+                                } else if let num = peerIdVal as? NSNumber {
+                                    peerId = PeerId(num.int64Value)
+                                }
+                            }
+                            if peerId == nil {
+                                if let fromId = payload["from_id"] {
+                                    let fromIdStr = (fromId as? String) ?? (fromId as? NSString as String?) ?? "\(fromId)"
+                                    peerId = PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(Int64(fromIdStr) ?? 0))
+                                } else if let fromId = payload["chat_id"] {
+                                    let fromIdStr = (fromId as? String) ?? (fromId as? NSString as String?) ?? "\(fromId)"
+                                    peerId = PeerId(namespace: Namespaces.Peer.CloudGroup, id: PeerId.Id._internalFromInt64Value(Int64(fromIdStr) ?? 0))
+                                } else if let fromId = payload["channel_id"] {
+                                    let fromIdStr = (fromId as? String) ?? (fromId as? NSString as String?) ?? "\(fromId)"
+                                    peerId = PeerId(namespace: Namespaces.Peer.CloudChannel, id: PeerId.Id._internalFromInt64Value(Int64(fromIdStr) ?? 0))
+                                }
                             }
                             
                             if let msgId = payload["msg_id"] {
-                                let msgIdValue = msgId as! NSString
-                                if let peerId = peerId {
-                                    notificationRequestId = .messageId(MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: Int32(msgIdValue.intValue)))
+                                let msgIdInt: Int32?
+                                if let str = msgId as? String {
+                                    msgIdInt = Int32(str)
+                                } else if let num = msgId as? NSNumber {
+                                    msgIdInt = num.int32Value
+                                } else if let nsStr = msgId as? NSString {
+                                    msgIdInt = Int32(nsStr.intValue)
+                                } else {
+                                    msgIdInt = nil
+                                }
+                                if let peerId = peerId, let msgIdInt = msgIdInt {
+                                    notificationRequestId = .messageId(MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: msgIdInt))
                                 }
                             }
                             
@@ -2153,6 +2171,20 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         self.isActivePromise.set(true)
 
         self.resetBadge()
+        
+        if let clearNotificationsManager = self.clearNotificationsManager {
+            let _ = (self.sharedContextPromise.get()
+            |> take(1)
+            |> deliverOnMainQueue).start(next: { sharedApplicationContext in
+                let _ = (sharedApplicationContext.sharedContext.activeAccountContexts
+                |> take(1)
+                |> deliverOnMainQueue).start(next: { activeAccounts in
+                    for (_, context, _) in activeAccounts.accounts {
+                        clearNotificationsManager.clearReadNotifications(postbox: context.account.postbox)
+                    }
+                })
+            })
+        }
         
         self.maybeCheckForUpdates()
         

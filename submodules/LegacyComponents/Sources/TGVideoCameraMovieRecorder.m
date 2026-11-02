@@ -39,6 +39,7 @@ typedef enum {
     
     CMTime _startTimeStamp;
     CMTime _lastAudioTimeStamp;
+    CMTime _lastVideoTimeStamp;
     
     CMTime _timeOffset;
     
@@ -84,9 +85,6 @@ typedef enum {
 
 - (void)addAudioTrackWithSourceFormatDescription:(CMFormatDescriptionRef)formatDescription settings:(NSDictionary *)audioSettings
 {
-	if (formatDescription == NULL)
-		return;
-
 	@synchronized (self)
 	{
 		if (_status != TGMovieRecorderStatusIdle)
@@ -95,7 +93,8 @@ typedef enum {
 		if (_audioTrackSourceFormatDescription)
 			return;
 		
-		_audioTrackSourceFormatDescription = (CMFormatDescriptionRef)CFRetain(formatDescription);
+		if (formatDescription != NULL)
+			_audioTrackSourceFormatDescription = (CMFormatDescriptionRef)CFRetain(formatDescription);
 		_audioTrackSettings = [audioSettings copy];
 	}
 }
@@ -126,7 +125,7 @@ typedef enum {
 				succeed = [self setupAssetWriterVideoInputWithSourceFormatDescription:_videoTrackSourceFormatDescription transform:_videoTrackTransform settings:_videoTrackSettings];
 			}
 			
-			if (error == nil && succeed && _audioTrackSourceFormatDescription)
+			if (error == nil && succeed && (_audioTrackSourceFormatDescription != NULL || _audioTrackSettings != nil))
             {
 				succeed = [self setupAssetWriterAudioInputWithSourceFormatDescription:_audioTrackSourceFormatDescription settings:_audioTrackSettings];
 			}
@@ -302,6 +301,11 @@ typedef enum {
 			
 			if (!_haveStartedSession)
             {
+                if (mediaType == AVMediaTypeAudio)
+                {
+                    CFRelease(sampleBuffer);
+                    return;
+                }
 				[_assetWriter startSessionAtSourceTime:CMSampleBufferGetPresentationTimeStamp(sampleBuffer)];
 				_haveStartedSession = true;
                 
@@ -309,12 +313,21 @@ typedef enum {
 			}
             
 			AVAssetWriterInput *input = (mediaType == AVMediaTypeVideo) ? _videoInput : _audioInput;
+            if (input == nil)
+            {
+                CFRelease(buffer);
+                return;
+            }
+            
             @synchronized (self)
             {
                 if (_wasPaused)
                 {
                     if (input == _videoInput)
+                    {
+                        CFRelease(buffer);
                         return;
+                    }
                     
                     _wasPaused = false;
                     
@@ -343,17 +356,35 @@ typedef enum {
             if (duration.value > 0)
                 pts = CMTimeAdd(pts, duration);
             
-            if (input == _audioInput)
-                _lastAudioTimeStamp = pts;
+            // Drop audio frames timestamped before session start to prevent AVAssetWriter failure
+            if (input == _audioInput && (_startTimeStamp.flags & kCMTimeFlags_Valid))
+            {
+                if (CMTimeCompare(pts, _startTimeStamp) < 0)
+                {
+                    CFRelease(buffer);
+                    return;
+                }
+            }
             
-			if (input.readyForMoreMediaData)
+            @synchronized (self)
+            {
+                if (input == _audioInput)
+                    _lastAudioTimeStamp = pts;
+                else if (input == _videoInput)
+                    _lastVideoTimeStamp = pts;
+            }
+            
+			if (input.readyForMoreMediaData && _assetWriter.status == AVAssetWriterStatusWriting)
 			{
 				if (![input appendSampleBuffer:buffer])
                 {
 					NSError *error = _assetWriter.error;
 					@synchronized (self)
                     {
-						[self transitionToStatus:TGMovieRecorderStatusFailed error:error completed:nil];
+                        if (_assetWriter.status == AVAssetWriterStatusFailed)
+                        {
+                            [self transitionToStatus:TGMovieRecorderStatusFailed error:error completed:nil];
+                        }
 					}
 				}
 			}
@@ -485,7 +516,27 @@ typedef enum {
 
 - (NSTimeInterval)videoDuration
 {
-    return CMTimeGetSeconds(CMTimeSubtract(_lastAudioTimeStamp, _startTimeStamp));
+    @synchronized (self)
+    {
+        CMTime lastTime = kCMTimeInvalid;
+        if (_lastAudioTimeStamp.flags & kCMTimeFlags_Valid)
+        {
+            lastTime = _lastAudioTimeStamp;
+        }
+        if (_lastVideoTimeStamp.flags & kCMTimeFlags_Valid)
+        {
+            if (!(lastTime.flags & kCMTimeFlags_Valid) || CMTimeCompare(_lastVideoTimeStamp, lastTime) > 0)
+            {
+                lastTime = _lastVideoTimeStamp;
+            }
+        }
+        if ((lastTime.flags & kCMTimeFlags_Valid) && (_startTimeStamp.flags & kCMTimeFlags_Valid))
+        {
+            NSTimeInterval duration = CMTimeGetSeconds(CMTimeSubtract(lastTime, _startTimeStamp));
+            return (isnan(duration) || duration < 0.0) ? 0.0 : duration;
+        }
+        return 0.0;
+    }
 }
 
 @end

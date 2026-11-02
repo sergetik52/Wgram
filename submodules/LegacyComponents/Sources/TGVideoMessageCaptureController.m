@@ -745,10 +745,16 @@ typedef enum
 - (bool)stop
 {
     if (!_capturePipeline.isRecording)
+    {
+        [self dismiss:true];
         return false;
+    }
     
     if (_capturePipeline.videoDuration < 0.33)
+    {
+        [self dismiss:true];
         return false;
+    }
     
     if ([self.view.window isKindOfClass:[TGVideoMessageCaptureControllerWindow class]]) {
         ((TGVideoMessageCaptureControllerWindow *)self.view.window).locked = false;
@@ -1326,6 +1332,11 @@ typedef enum
 
 - (void)capturePipeline:(TGVideoCameraPipeline *)__unused capturePipeline recordingDidFailWithError:(NSError *)__unused error
 {
+    TGDispatchOnMainThread(^{
+        if (!self->_stopped && !self->_dismissed) {
+            [self dismiss:true];
+        }
+    });
 }
 
 #pragma mark - 
