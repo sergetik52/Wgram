@@ -5,6 +5,16 @@ import CoreMotion
 import Postbox
 import TelegramCore
 
+public final class WgramPassthroughWindow: UIWindow {
+    public override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hitView = super.hitTest(point, with: event)
+        if hitView == self || hitView == self.rootViewController?.view {
+            return nil
+        }
+        return hitView
+    }
+}
+
 public final class WgramPluginEngine {
     public static let shared = WgramPluginEngine()
     public static let pluginsChangedNotification = Notification.Name("WgramPluginsChangedNotification")
@@ -193,21 +203,43 @@ public final class WgramPluginEngine {
         self.activeContexts[plugin.id] = context
     }
     
-    public static var keyWindow: UIWindow? {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        for scene in scenes {
-            if let window = scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first {
-                return window
-            }
+    private var overlayWindow: WgramPassthroughWindow?
+    
+    private func ensureOverlayWindow() -> WgramPassthroughWindow {
+        if let existing = self.overlayWindow {
+            existing.isHidden = false
+            return existing
         }
-        return nil
+        
+        let windowScene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first
+        
+        let window: WgramPassthroughWindow
+        if let scene = windowScene {
+            window = WgramPassthroughWindow(windowScene: scene)
+        } else {
+            window = WgramPassthroughWindow(frame: UIScreen.main.bounds)
+        }
+        
+        window.windowLevel = UIWindow.Level.statusBar - 0.001
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        
+        let rootVC = UIViewController()
+        rootVC.view.backgroundColor = .clear
+        window.rootViewController = rootVC
+        window.isHidden = false
+        
+        self.overlayWindow = window
+        return window
     }
     
     private func spawnWidget(pluginId: String, width: CGFloat, height: CGFloat, initialX: CGFloat, initialY: CGFloat) -> WgramFloatingWidget {
+        let window = self.ensureOverlayWindow()
         let widget = WgramFloatingWidget(width: width, height: height, initialX: initialX, initialY: initialY)
-        if let keyWindow = WgramPluginEngine.keyWindow {
-            keyWindow.addSubview(widget)
-        }
+        window.rootViewController?.view.addSubview(widget)
+        
         var list = self.activeWidgets[pluginId] ?? []
         list.append(widget)
         self.activeWidgets[pluginId] = list
@@ -220,6 +252,9 @@ public final class WgramPluginEngine {
                 widget.destroy()
             }
             self.activeWidgets.removeValue(forKey: id)
+        }
+        if self.activeWidgets.isEmpty {
+            self.overlayWindow?.isHidden = true
         }
         self.outgoingMessageHooks.removeValue(forKey: id)
         self.commandHooks.removeValue(forKey: id)
@@ -366,7 +401,8 @@ public final class WgramPluginEngine {
     
     // MARK: - Toast Alert
     private static func showToastAlert(message: String) {
-        guard let window = WgramPluginEngine.keyWindow else { return }
+        let window = WgramPluginEngine.shared.ensureOverlayWindow()
+        guard let targetView = window.rootViewController?.view else { return }
         
         let container = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))
         container.layer.cornerRadius = 16.0
@@ -383,14 +419,14 @@ public final class WgramPluginEngine {
         label.numberOfLines = 2
         
         container.contentView.addSubview(label)
-        window.addSubview(container)
+        targetView.addSubview(container)
         
-        let maxW = min(window.bounds.width - 40.0, 300.0)
+        let maxW = min(targetView.bounds.width - 40.0, 300.0)
         let size = label.sizeThatFits(CGSize(width: maxW, height: 100))
         let toastW = size.width + 32.0
         let toastH = max(40.0, size.height + 16.0)
         
-        container.frame = CGRect(x: (window.bounds.width - toastW) / 2.0, y: window.safeAreaInsets.top + 20.0, width: toastW, height: toastH)
+        container.frame = CGRect(x: (targetView.bounds.width - toastW) / 2.0, y: targetView.safeAreaInsets.top + 20.0, width: toastW, height: toastH)
         label.frame = container.bounds.insetBy(dx: 16.0, dy: 8.0)
         
         container.alpha = 0

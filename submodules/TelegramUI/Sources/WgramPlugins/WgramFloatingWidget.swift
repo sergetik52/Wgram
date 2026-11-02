@@ -22,7 +22,7 @@ import CoreMotion
     var onDraw: JSValue? { get set }
 }
 
-public final class WgramFloatingWidget: UIView, WgramFloatingWidgetJSExport {
+public final class WgramFloatingWidget: UIView, WgramFloatingWidgetJSExport, UIGestureRecognizerDelegate {
     public var onTick: JSValue?
     public var onTouch: JSValue?
     public var onDraw: JSValue?
@@ -70,22 +70,35 @@ public final class WgramFloatingWidget: UIView, WgramFloatingWidgetJSExport {
         self.speechDismissTimer?.invalidate()
     }
     
+    // Expand touch target for easy finger interaction
+    public override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        return self.bounds.insetBy(dx: -16.0, dy: -16.0).contains(point)
+    }
+    
     // MARK: - Gestures
     private func setupGestures() {
         self.panGesture = UIPanGestureRecognizer(target: self, action: #selector(self.handlePan(_:)))
+        self.panGesture.delegate = self
         self.addGestureRecognizer(self.panGesture)
         
         self.doubleTapGesture = UITapGestureRecognizer(target: self, action: #selector(self.handleDoubleTap(_:)))
         self.doubleTapGesture.numberOfTapsRequired = 2
+        self.doubleTapGesture.delegate = self
         self.addGestureRecognizer(self.doubleTapGesture)
         
         self.tapGesture = UITapGestureRecognizer(target: self, action: #selector(self.handleTap(_:)))
         self.tapGesture.require(toFail: self.doubleTapGesture)
+        self.tapGesture.delegate = self
         self.addGestureRecognizer(self.tapGesture)
         
         self.holdGesture = UILongPressGestureRecognizer(target: self, action: #selector(self.handleHold(_:)))
         self.holdGesture.minimumPressDuration = 0.4
+        self.holdGesture.delegate = self
         self.addGestureRecognizer(self.holdGesture)
+    }
+    
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return false
     }
     
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
@@ -166,9 +179,9 @@ public final class WgramFloatingWidget: UIView, WgramFloatingWidgetJSExport {
             // Screen boundaries
             let safeArea = superview.safeAreaInsets
             let minX = safeArea.left
-            let maxX = superview.bounds.width - safeArea.right - self.frame.width
+            let maxX = max(minX, superview.bounds.width - safeArea.right - self.frame.width)
             let minY = safeArea.top + 20.0
-            let maxY = superview.bounds.height - safeArea.bottom - self.frame.height - 10.0
+            let maxY = max(minY, superview.bounds.height - safeArea.bottom - self.frame.height - 10.0)
             
             if currentPos.x <= minX {
                 currentPos.x = minX
@@ -309,10 +322,9 @@ public final class WgramFloatingWidget: UIView, WgramFloatingWidgetJSExport {
         var bubbleX = petFrame.midX - bubbleSize.width / 2.0
         var bubbleY = petFrame.minY - bubbleSize.height - 8.0
         
-        // Clamping to screen edges
         bubbleX = max(16.0, min(superview.bounds.width - bubbleSize.width - 16.0, bubbleX))
         if bubbleY < superview.safeAreaInsets.top + 10.0 {
-            bubbleY = petFrame.maxY + 8.0 // Show below if too high
+            bubbleY = petFrame.maxY + 8.0
         }
         
         bubble.frame = CGRect(origin: CGPoint(x: bubbleX, y: bubbleY), size: bubbleSize)
@@ -344,6 +356,7 @@ public final class WgramSpeechBubbleView: UIView {
         self.layer.shadowOpacity = 0.15
         self.layer.shadowRadius = 8.0
         self.layer.shadowOffset = CGSize(width: 0, height: 3)
+        self.isUserInteractionEnabled = true
         
         self.blurView.frame = self.bounds
         self.blurView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -354,10 +367,17 @@ public final class WgramSpeechBubbleView: UIView {
         self.label.numberOfLines = 0
         self.label.textAlignment = .center
         self.blurView.contentView.addSubview(self.label)
+        
+        let tap = UITapGestureRecognizer(target: self, action: #selector(self.bubbleTapped))
+        self.addGestureRecognizer(tap)
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+    
+    @objc private func bubbleTapped() {
+        self.hideAnimated {}
     }
     
     public func setText(_ text: String) {
