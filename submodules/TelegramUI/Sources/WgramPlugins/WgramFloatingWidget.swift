@@ -1,0 +1,416 @@
+import Foundation
+import UIKit
+import JavaScriptCore
+import CoreMotion
+
+@objc public protocol WgramFloatingWidgetJSExport: JSExport {
+    func setPosition(_ x: Double, _ y: Double)
+    func getPosition() -> [String: Double]
+    func setSize(_ width: Double, _ height: Double)
+    func drawRect(_ x: Double, _ y: Double, _ width: Double, _ height: Double, _ colorHex: String)
+    func clear()
+    func redraw()
+    func showSpeech(_ text: String, _ duration: Double)
+    func hideSpeech()
+    func setPhysicsEnabled(_ enabled: Bool)
+    func setVelocity(_ vx: Double, _ vy: Double)
+    func setGravity(_ gx: Double, _ gy: Double)
+    func destroy()
+    
+    var onTick: JSValue? { get set }
+    var onTouch: JSValue? { get set }
+    var onDraw: JSValue? { get set }
+}
+
+public final class WgramFloatingWidget: UIView, WgramFloatingWidgetJSExport {
+    public var onTick: JSValue?
+    public var onTouch: JSValue?
+    public var onDraw: JSValue?
+    
+    private var pixelRects: [(rect: CGRect, color: UIColor)] = []
+    private var displayLink: CADisplayLink?
+    private var lastTimestamp: CFTimeInterval = 0
+    
+    // Physics properties
+    private var isPhysicsEnabled: Bool = true
+    private var velocity: CGPoint = .zero
+    private var gravity: CGPoint = CGPoint(x: 0, y: 980.0) // 980 pt/s^2 downward
+    private var elasticity: CGFloat = 0.55
+    
+    // Speech bubble
+    private var speechBubbleView: WgramSpeechBubbleView?
+    private var speechDismissTimer: Foundation.Timer?
+    
+    // Gestures
+    private var panGesture: UIPanGestureRecognizer!
+    private var tapGesture: UITapGestureRecognizer!
+    private var doubleTapGesture: UITapGestureRecognizer!
+    private var holdGesture: UILongPressGestureRecognizer!
+    private var isDragging: Bool = false
+    
+    public init(width: CGFloat, height: CGFloat, initialX: CGFloat = 100, initialY: CGFloat = 300) {
+        let frame = CGRect(x: initialX, y: initialY, width: max(20, width), height: max(20, height))
+        super.init(frame: frame)
+        
+        self.backgroundColor = .clear
+        self.isOpaque = false
+        self.layer.masksToBounds = false
+        self.isUserInteractionEnabled = true
+        
+        self.setupGestures()
+        self.setupDisplayLink()
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    deinit {
+        self.displayLink?.invalidate()
+        self.speechDismissTimer?.invalidate()
+    }
+    
+    // MARK: - Gestures
+    private func setupGestures() {
+        self.panGesture = UIPanGestureRecognizer(target: self, action: #selector(self.handlePan(_:)))
+        self.addGestureRecognizer(self.panGesture)
+        
+        self.doubleTapGesture = UITapGestureRecognizer(target: self, action: #selector(self.handleDoubleTap(_:)))
+        self.doubleTapGesture.numberOfTapsRequired = 2
+        self.addGestureRecognizer(self.doubleTapGesture)
+        
+        self.tapGesture = UITapGestureRecognizer(target: self, action: #selector(self.handleTap(_:)))
+        self.tapGesture.require(toFail: self.doubleTapGesture)
+        self.addGestureRecognizer(self.tapGesture)
+        
+        self.holdGesture = UILongPressGestureRecognizer(target: self, action: #selector(self.handleHold(_:)))
+        self.holdGesture.minimumPressDuration = 0.4
+        self.addGestureRecognizer(self.holdGesture)
+    }
+    
+    @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
+        let loc = gesture.location(in: self)
+        self.callTouch(type: "tap", x: loc.x, y: loc.y, dx: 0, dy: 0, vx: 0, vy: 0)
+    }
+    
+    @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+        let loc = gesture.location(in: self)
+        self.callTouch(type: "double_tap", x: loc.x, y: loc.y, dx: 0, dy: 0, vx: 0, vy: 0)
+    }
+    
+    @objc private func handleHold(_ gesture: UILongPressGestureRecognizer) {
+        let loc = gesture.location(in: self)
+        if gesture.state == .began {
+            self.callTouch(type: "hold", x: loc.x, y: loc.y, dx: 0, dy: 0, vx: 0, vy: 0)
+        } else if gesture.state == .changed {
+            self.callTouch(type: "pet", x: loc.x, y: loc.y, dx: 0, dy: 0, vx: 0, vy: 0)
+        }
+    }
+    
+    @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
+        guard let superview = self.superview else { return }
+        let translation = gesture.translation(in: superview)
+        let vel = gesture.velocity(in: superview)
+        let loc = gesture.location(in: self)
+        
+        switch gesture.state {
+        case .began:
+            self.isDragging = true
+            self.velocity = .zero
+            self.callTouch(type: "drag_start", x: loc.x, y: loc.y, dx: 0, dy: 0, vx: vel.x, vy: vel.y)
+        case .changed:
+            self.center = CGPoint(x: self.center.x + translation.x, y: self.center.y + translation.y)
+            gesture.setTranslation(.zero, in: superview)
+            self.updateSpeechBubblePosition()
+            self.callTouch(type: "drag", x: loc.x, y: loc.y, dx: translation.x, dy: translation.y, vx: vel.x, vy: vel.y)
+        case .ended, .cancelled:
+            self.isDragging = false
+            self.velocity = CGPoint(x: vel.x, y: vel.y)
+            self.callTouch(type: "throw", x: loc.x, y: loc.y, dx: 0, dy: 0, vx: vel.x, vy: vel.y)
+        default:
+            break
+        }
+    }
+    
+    private func callTouch(type: String, x: CGFloat, y: CGFloat, dx: CGFloat, dy: CGFloat, vx: CGFloat, vy: CGFloat) {
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self, let callback = strongSelf.onTouch else { return }
+            callback.call(withArguments: [type, Double(x), Double(y), Double(dx), Double(dy), Double(vx), Double(vy)])
+        }
+    }
+    
+    // MARK: - Display Link & Physics
+    private func setupDisplayLink() {
+        self.displayLink = CADisplayLink(target: self, selector: #selector(self.stepPhysics(_:)))
+        self.displayLink?.add(to: .main, forMode: .common)
+    }
+    
+    @objc private func stepPhysics(_ link: CADisplayLink) {
+        if self.lastTimestamp == 0 {
+            self.lastTimestamp = link.timestamp
+            return
+        }
+        let dt = CGFloat(min(0.05, link.timestamp - self.lastTimestamp))
+        self.lastTimestamp = link.timestamp
+        
+        if self.isPhysicsEnabled && !self.isDragging, let superview = self.superview {
+            // Apply velocity
+            var currentPos = self.frame.origin
+            currentPos.x += self.velocity.x * dt
+            currentPos.y += self.velocity.y * dt
+            
+            // Gravity
+            self.velocity.y += self.gravity.y * dt
+            self.velocity.x += self.gravity.x * dt
+            
+            // Screen boundaries
+            let safeArea = superview.safeAreaInsets
+            let minX = safeArea.left
+            let maxX = superview.bounds.width - safeArea.right - self.frame.width
+            let minY = safeArea.top + 20.0
+            let maxY = superview.bounds.height - safeArea.bottom - self.frame.height - 10.0
+            
+            if currentPos.x <= minX {
+                currentPos.x = minX
+                self.velocity.x = -self.velocity.x * self.elasticity
+            } else if currentPos.x >= maxX {
+                currentPos.x = maxX
+                self.velocity.x = -self.velocity.x * self.elasticity
+            }
+            
+            if currentPos.y <= minY {
+                currentPos.y = minY
+                self.velocity.y = -self.velocity.y * self.elasticity
+            } else if currentPos.y >= maxY {
+                currentPos.y = maxY
+                self.velocity.y = -self.velocity.y * self.elasticity
+                // Friction on floor
+                self.velocity.x *= 0.88
+                if abs(self.velocity.x) < 5.0 { self.velocity.x = 0 }
+                if abs(self.velocity.y) < 15.0 { self.velocity.y = 0 }
+            }
+            
+            self.frame.origin = currentPos
+            self.updateSpeechBubblePosition()
+        }
+        
+        // Notify JS onTick
+        if let callback = self.onTick {
+            callback.call(withArguments: [Double(dt)])
+        }
+    }
+    
+    // MARK: - Drawing Canvas
+    public override func draw(_ rect: CGRect) {
+        guard let ctx = UIGraphicsGetCurrentContext() else { return }
+        for (itemRect, color) in self.pixelRects {
+            ctx.setFillColor(color.cgColor)
+            ctx.fill(itemRect)
+        }
+    }
+    
+    // MARK: - JSExport Implementation
+    public func setPosition(_ x: Double, _ y: Double) {
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self else { return }
+            strongSelf.frame.origin = CGPoint(x: CGFloat(x), y: CGFloat(y))
+            strongSelf.updateSpeechBubblePosition()
+        }
+    }
+    
+    public func getPosition() -> [String: Double] {
+        return ["x": Double(self.frame.origin.x), "y": Double(self.frame.origin.y)]
+    }
+    
+    public func setSize(_ width: Double, _ height: Double) {
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self else { return }
+            strongSelf.frame.size = CGSize(width: CGFloat(width), height: CGFloat(height))
+            strongSelf.setNeedsDisplay()
+        }
+    }
+    
+    public func drawRect(_ x: Double, _ y: Double, _ width: Double, _ height: Double, _ colorHex: String) {
+        let color = UIColor(hexString: colorHex)
+        let rect = CGRect(x: CGFloat(x), y: CGFloat(y), width: CGFloat(width), height: CGFloat(height))
+        self.pixelRects.append((rect, color))
+    }
+    
+    public func clear() {
+        self.pixelRects.removeAll(keepingCapacity: true)
+    }
+    
+    public func redraw() {
+        DispatchQueue.main.async { [weak self] in
+            self?.setNeedsDisplay()
+        }
+    }
+    
+    public func setPhysicsEnabled(_ enabled: Bool) {
+        DispatchQueue.main.async { [weak self] in
+            self?.isPhysicsEnabled = enabled
+        }
+    }
+    
+    public func setVelocity(_ vx: Double, _ vy: Double) {
+        DispatchQueue.main.async { [weak self] in
+            self?.velocity = CGPoint(x: CGFloat(vx), y: CGFloat(vy))
+        }
+    }
+    
+    public func setGravity(_ gx: Double, _ gy: Double) {
+        DispatchQueue.main.async { [weak self] in
+            self?.gravity = CGPoint(x: CGFloat(gx), y: CGFloat(gy))
+        }
+    }
+    
+    // MARK: - Speech Bubble
+    public func showSpeech(_ text: String, _ duration: Double) {
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self, let superview = strongSelf.superview else { return }
+            
+            strongSelf.speechDismissTimer?.invalidate()
+            
+            let bubble: WgramSpeechBubbleView
+            if let existing = strongSelf.speechBubbleView {
+                bubble = existing
+            } else {
+                bubble = WgramSpeechBubbleView()
+                strongSelf.speechBubbleView = bubble
+                superview.addSubview(bubble)
+            }
+            
+            bubble.setText(text)
+            strongSelf.updateSpeechBubblePosition()
+            bubble.showAnimated()
+            
+            let timeout = duration > 0 ? duration : 3.5
+            strongSelf.speechDismissTimer = Foundation.Timer.scheduledTimer(withTimeInterval: timeout, repeats: false) { [weak self] _ in
+                self?.hideSpeech()
+            }
+        }
+    }
+    
+    public func hideSpeech() {
+        DispatchQueue.main.async { [weak self] in
+            self?.speechDismissTimer?.invalidate()
+            self?.speechBubbleView?.hideAnimated { [weak self] in
+                self?.speechBubbleView?.removeFromSuperview()
+                self?.speechBubbleView = nil
+            }
+        }
+    }
+    
+    private func updateSpeechBubblePosition() {
+        guard let bubble = self.speechBubbleView, let superview = self.superview else { return }
+        let petFrame = self.frame
+        let bubbleSize = bubble.sizeThatFits(CGSize(width: 220, height: 120))
+        
+        var bubbleX = petFrame.midX - bubbleSize.width / 2.0
+        var bubbleY = petFrame.minY - bubbleSize.height - 8.0
+        
+        // Clamping to screen edges
+        bubbleX = max(16.0, min(superview.bounds.width - bubbleSize.width - 16.0, bubbleX))
+        if bubbleY < superview.safeAreaInsets.top + 10.0 {
+            bubbleY = petFrame.maxY + 8.0 // Show below if too high
+        }
+        
+        bubble.frame = CGRect(origin: CGPoint(x: bubbleX, y: bubbleY), size: bubbleSize)
+    }
+    
+    public func destroy() {
+        DispatchQueue.main.async { [weak self] in
+            self?.displayLink?.invalidate()
+            self?.displayLink = nil
+            self?.speechDismissTimer?.invalidate()
+            self?.speechBubbleView?.removeFromSuperview()
+            self?.speechBubbleView = nil
+            self?.removeFromSuperview()
+        }
+    }
+}
+
+// MARK: - Frosted Glass Speech Bubble
+public final class WgramSpeechBubbleView: UIView {
+    private let blurView = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
+    private let label = UILabel()
+    
+    public override init(frame: CGRect) {
+        super.init(frame: frame)
+        
+        self.layer.cornerRadius = 14.0
+        self.layer.masksToBounds = true
+        self.layer.shadowColor = UIColor.black.cgColor
+        self.layer.shadowOpacity = 0.15
+        self.layer.shadowRadius = 8.0
+        self.layer.shadowOffset = CGSize(width: 0, height: 3)
+        
+        self.blurView.frame = self.bounds
+        self.blurView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        self.addSubview(self.blurView)
+        
+        self.label.font = UIFont.systemFont(ofSize: 13.0, weight: .medium)
+        self.label.textColor = .label
+        self.label.numberOfLines = 0
+        self.label.textAlignment = .center
+        self.blurView.contentView.addSubview(self.label)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    public func setText(_ text: String) {
+        self.label.text = text
+        self.setNeedsLayout()
+    }
+    
+    public override func sizeThatFits(_ size: CGSize) -> CGSize {
+        let maxLabelWidth: CGFloat = 200.0
+        let textSize = self.label.sizeThatFits(CGSize(width: maxLabelWidth, height: CGFloat.greatestFiniteMagnitude))
+        return CGSize(width: max(60, textSize.width + 24.0), height: max(32, textSize.height + 16.0))
+    }
+    
+    public override func layoutSubviews() {
+        super.layoutSubviews()
+        self.label.frame = self.bounds.insetBy(dx: 12.0, dy: 8.0)
+    }
+    
+    public func showAnimated() {
+        self.alpha = 0
+        self.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
+        UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 0.75, initialSpringVelocity: 0.8, options: [], animations: {
+            self.alpha = 1.0
+            self.transform = .identity
+        })
+    }
+    
+    public func hideAnimated(completion: @escaping () -> Void) {
+        UIView.animate(withDuration: 0.2, animations: {
+            self.alpha = 0
+            self.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
+        }) { _ in
+            completion()
+        }
+    }
+}
+
+// Helper Hex color
+private extension UIColor {
+    convenience init(hexString: String) {
+        var hex = hexString.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if hex.hasPrefix("#") {
+            hex.remove(at: hex.startIndex)
+        }
+        if hex.count == 6 {
+            hex = "FF" + hex
+        }
+        var rgbValue: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&rgbValue)
+        let a = CGFloat((rgbValue & 0xFF000000) >> 24) / 255.0
+        let r = CGFloat((rgbValue & 0x00FF0000) >> 16) / 255.0
+        let g = CGFloat((rgbValue & 0x0000FF00) >> 8) / 255.0
+        let b = CGFloat(rgbValue & 0x000000FF) / 255.0
+        self.init(red: r, green: g, blue: b, alpha: a)
+    }
+}

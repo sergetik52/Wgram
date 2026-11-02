@@ -2207,6 +2207,9 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     public func chatControllerForForumThread(context: AccountContext, peerId: EnginePeer.Id, threadId: Int64) -> Signal<ChatController, NoError> {
         return chatControllerForForumThreadImpl(context: context, peerId: peerId, threadId: threadId)
     }
+    public func makeWgramPluginsController(context: AccountContext) -> ViewController {
+        return wgramPluginsController(context: context)
+    }
     
     public func openStorageUsage(context: AccountContext) {
         guard let navigationController = self.mainWindow?.viewController as? NavigationController else {

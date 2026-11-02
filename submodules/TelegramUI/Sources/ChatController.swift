@@ -9129,6 +9129,15 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 }
             }
             
+            switch message {
+            case let .message(text, attributes, inlineStickers, mediaReference, threadId, replyToMessageId, replyToStoryId, localGroupingKey, correlationId, bubbleUpEmojiOrStickersets):
+                if let modifiedText = WgramPluginEngine.shared.processOutgoingMessage(peerId: self.chatLocation.peerId, text: text) {
+                    message = .message(text: modifiedText, attributes: attributes, inlineStickers: inlineStickers, mediaReference: mediaReference, threadId: threadId, replyToMessageId: replyToMessageId, replyToStoryId: replyToStoryId, localGroupingKey: localGroupingKey, correlationId: correlationId, bubbleUpEmojiOrStickersets: bubbleUpEmojiOrStickersets)
+                }
+            case .forward:
+                break
+            }
+            
             return message.withUpdatedAttributes { attributes in
                 var attributes = attributes
                 

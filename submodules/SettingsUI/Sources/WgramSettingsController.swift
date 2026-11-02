@@ -57,6 +57,7 @@ private final class WgramSettingsControllerArguments {
     let requestLocationPermission: () -> Void
     let openSystemSettings: () -> Void
     
+    let openPlugins: () -> Void
     let toggleLocalPremium: (Bool) -> Void
     let toggleLocalPremiumCustomEmoji: (Bool) -> Void
     
@@ -100,6 +101,7 @@ private final class WgramSettingsControllerArguments {
         toggleTgWsCallsBridge: @escaping (Bool) -> Void,
         requestLocationPermission: @escaping () -> Void,
         openSystemSettings: @escaping () -> Void,
+        openPlugins: @escaping () -> Void,
         toggleLocalPremium: @escaping (Bool) -> Void,
         toggleLocalPremiumCustomEmoji: @escaping (Bool) -> Void
     ) {
@@ -142,12 +144,14 @@ private final class WgramSettingsControllerArguments {
         self.toggleTgWsCallsBridge = toggleTgWsCallsBridge
         self.requestLocationPermission = requestLocationPermission
         self.openSystemSettings = openSystemSettings
+        self.openPlugins = openPlugins
         self.toggleLocalPremium = toggleLocalPremium
         self.toggleLocalPremiumCustomEmoji = toggleLocalPremiumCustomEmoji
     }
 }
 
 private enum WgramSettingsSection: Int32 {
+    case plugins
     case ghostMaster
     case ghostDetails
     case localPremium
@@ -231,8 +235,14 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
     case keepAliveTestNotification
     case keepAliveFooter
     
+    case pluginsHeader
+    case pluginsItem
+    case pluginsFooter
+    
     var section: ItemListSectionId {
         switch self {
+        case .pluginsHeader, .pluginsItem, .pluginsFooter:
+            return WgramSettingsSection.plugins.rawValue
         case .ghostHeader, .ghostMaster, .ghostFooter:
             return WgramSettingsSection.ghostMaster.rawValue
         case .detailsHeader, .dontReadMessages, .dontSendTyping, .dontUpdateOnline, .dontReadStories, .dontReadMedia, .ghostSend, .markReadAfterAction, .detailsFooter:
@@ -258,6 +268,9 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
     
     var stableId: Int32 {
         switch self {
+        case .pluginsHeader: return -3
+        case .pluginsItem: return -2
+        case .pluginsFooter: return -1
         case .ghostHeader: return 0
         case .ghostMaster: return 1
         case .ghostFooter: return 2
@@ -328,6 +341,15 @@ private enum WgramSettingsEntry: ItemListNodeEntry {
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let arguments = arguments as! WgramSettingsControllerArguments
         switch self {
+        case .pluginsHeader:
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: "РАСШИРЕНИЯ И ПЛАГИНЫ", sectionId: self.section)
+        case .pluginsItem:
+            return ItemListDisclosureItem(presentationData: presentationData, icon: PresentationResourcesSettings.stickers, title: "Плагины Wgram", label: "🧩", sectionId: self.section, style: .blocks, action: {
+                arguments.openPlugins()
+            })
+        case .pluginsFooter:
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Устанавливайте JavaScript-плагины для кастомизации Wgram, интерактивных питомцев, команд и автоматизации."), sectionId: self.section)
+            
         case .ghostHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "РЕЖИМ ПРИЗРАКА", sectionId: self.section)
         case let .ghostMaster(value):
@@ -667,6 +689,11 @@ private struct WgramSettingsState: Equatable {
 
 private func wgramSettingsEntries(presentationData: PresentationData, state: WgramSettingsState) -> [WgramSettingsEntry] {
     var entries: [WgramSettingsEntry] = []
+    
+    // Plugins
+    entries.append(.pluginsHeader)
+    entries.append(.pluginsItem)
+    entries.append(.pluginsFooter)
     
     // Ghost Mode
     entries.append(.ghostHeader)
@@ -1077,6 +1104,9 @@ public func wgramSettingsController(context: AccountContext) -> ViewController {
             if let url = URL(string: UIApplication.openSettingsURLString) {
                 UIApplication.shared.open(url)
             }
+        },
+        openPlugins: {
+            pushControllerImpl?(context.sharedContext.makeWgramPluginsController(context: context))
         },
         toggleLocalPremium: { value in
             WgramSettings.localPremiumEnabled = value
