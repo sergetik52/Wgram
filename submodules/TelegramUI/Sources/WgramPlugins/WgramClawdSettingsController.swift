@@ -1,0 +1,367 @@
+import Foundation
+import UIKit
+import Display
+import SwiftSignalKit
+import Postbox
+import TelegramCore
+import TelegramPresentationData
+import TelegramUIPreferences
+import ItemListUI
+import PresentationDataUtils
+import AccountContext
+
+private final class WgramClawdSettingsArguments {
+    let context: AccountContext
+    let updateSetting: (String, Any) -> Void
+    let selectColor: () -> Void
+    let selectSize: () -> Void
+    let selectSleep: () -> Void
+    let recenterPet: () -> Void
+    let spitAll: () -> Void
+    let forgetBrain: () -> Void
+    let editApiKey: () -> Void
+    
+    init(
+        context: AccountContext,
+        updateSetting: @escaping (String, Any) -> Void,
+        selectColor: @escaping () -> Void,
+        selectSize: @escaping () -> Void,
+        selectSleep: @escaping () -> Void,
+        recenterPet: @escaping () -> Void,
+        spitAll: @escaping () -> Void,
+        forgetBrain: @escaping () -> Void,
+        editApiKey: @escaping () -> Void
+    ) {
+        self.context = context
+        self.updateSetting = updateSetting
+        self.selectColor = selectColor
+        self.selectSize = selectSize
+        self.selectSleep = selectSleep
+        self.recenterPet = recenterPet
+        self.spitAll = spitAll
+        self.forgetBrain = forgetBrain
+        self.editApiKey = editApiKey
+    }
+}
+
+private enum WgramClawdSection: Int32 {
+    case appearance = 0
+    case behavior
+    case actions
+    case brain
+    case ai
+}
+
+private enum WgramClawdEntryStableId: Hashable {
+    case header(Int32)
+    case item(String)
+}
+
+private enum WgramClawdEntry: ItemListNodeEntry {
+    case header(Int32, PresentationTheme, String)
+    case disclosureItem(Int32, String, PresentationTheme, String, String, () -> Void)
+    case switchItem(Int32, String, PresentationTheme, String, Bool, (Bool) -> Void)
+    case actionItem(Int32, String, PresentationTheme, String, ItemListActionKind, () -> Void)
+    case textItem(Int32, String, PresentationTheme, String, String)
+    
+    var section: ItemListSectionId {
+        switch self {
+        case let .header(sec, _, _): return sec
+        case let .disclosureItem(sec, _, _, _, _, _): return sec
+        case let .switchItem(sec, _, _, _, _, _): return sec
+        case let .actionItem(sec, _, _, _, _, _): return sec
+        case let .textItem(sec, _, _, _, _): return sec
+        }
+    }
+    
+    var stableId: WgramClawdEntryStableId {
+        switch self {
+        case let .header(sec, _, title): return .header(sec * 1000 + Int32(title.hashValue))
+        case let .disclosureItem(_, id, _, _, _, _): return .item(id)
+        case let .switchItem(_, id, _, _, _, _): return .item(id)
+        case let .actionItem(_, id, _, _, _, _): return .item(id)
+        case let .textItem(_, id, _, _, _): return .item(id)
+        }
+    }
+    
+    static func ==(lhs: WgramClawdEntry, rhs: WgramClawdEntry) -> Bool {
+        switch (lhs, rhs) {
+        case let (.header(s1, t1, text1), .header(s2, t2, text2)):
+            return s1 == s2 && t1 === t2 && text1 == text2
+        case let (.disclosureItem(s1, id1, t1, title1, val1, _), .disclosureItem(s2, id2, t2, title2, val2, _)):
+            return s1 == s2 && id1 == id2 && t1 === t2 && title1 == title2 && val1 == val2
+        case let (.switchItem(s1, id1, t1, title1, val1, _), .switchItem(s2, id2, t2, title2, val2, _)):
+            return s1 == s2 && id1 == id2 && t1 === t2 && title1 == title2 && val1 == val2
+        case let (.actionItem(s1, id1, t1, title1, kind1, _), .actionItem(s2, id2, t2, title2, kind2, _)):
+            return s1 == s2 && id1 == id2 && t1 === t2 && title1 == title2 && kind1 == kind2
+        case let (.textItem(s1, id1, t1, title1, val1), .textItem(s2, id2, t2, title2, val2)):
+            return s1 == s2 && id1 == id2 && t1 === t2 && title1 == title2 && val1 == val2
+        default:
+            return false
+        }
+    }
+    
+    static func <(lhs: WgramClawdEntry, rhs: WgramClawdEntry) -> Bool {
+        if lhs.section != rhs.section {
+            return lhs.section < rhs.section
+        }
+        return lhs.stableId.hashValue < rhs.stableId.hashValue
+    }
+    
+    func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
+        switch self {
+        case let .header(_, _, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
+        case let .disclosureItem(_, _, _, title, value, action):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: self.section, style: .blocks, action: action)
+        case let .switchItem(_, _, _, title, value, updated):
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: updated)
+        case let .actionItem(_, _, _, title, kind, action):
+            return ItemListActionItem(presentationData: presentationData, title: title, kind: kind, alignment: .natural, sectionId: self.section, style: .blocks, action: action)
+        case let .textItem(_, _, _, title, value):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: self.section, style: .blocks, action: nil)
+        }
+    }
+}
+
+public func wgramClawdSettingsController(context: AccountContext) -> ViewController {
+    let statePromise = ValuePromise<Int>(0, ignoreRepeated: false)
+    var presentControllerImpl: ((ViewController, Any?) -> Void)?
+    
+    let getPref = { (key: String, defVal: String) -> String in
+        return UserDefaults.standard.string(forKey: "wgram_plugin_clawd_pet_\(key)") ?? defVal
+    }
+    let getBoolPref = { (key: String, defVal: Bool) -> Bool in
+        if let val = UserDefaults.standard.object(forKey: "wgram_plugin_clawd_pet_\(key)") as? Bool {
+            return val
+        }
+        return defVal
+    }
+    let setPref = { (key: String, val: Any) in
+        UserDefaults.standard.set(val, forKey: "wgram_plugin_clawd_pet_\(key)")
+        NotificationCenter.default.post(name: NSNotification.Name("WgramClawdSettingsUpdated"), object: nil)
+        statePromise.set(Int.random(in: 1...100000))
+    }
+    
+    let palettes = ["Claude", "Мятный", "Лавандовый", "Небесный", "Розовый", "Графит"]
+    let sizes = ["Маленький", "Средний", "Большой"]
+    let sleeps = ["Через 1 мин", "Через 3 мин", "Через 10 мин", "Никогда"]
+    
+    let arguments = WgramClawdSettingsArguments(
+        context: context,
+        updateSetting: { key, val in
+            setPref(key, val)
+        },
+        selectColor: {
+            let current = Int(getPref("color", "0")) ?? 0
+            let actionSheet = ActionSheetController(presentationData: context.sharedContext.currentPresentationData.with { $0 })
+            var items: [ActionSheetItem] = [ActionSheetTextItem(title: "Выберите окрас питомца")]
+            for (idx, name) in palettes.enumerated() {
+                let check = idx == current ? " ✓" : ""
+                items.append(ActionSheetButtonItem(title: "\(name)\(check)", color: .accent, action: { [weak actionSheet] in
+                    actionSheet?.dismissAnimated()
+                    setPref("color", "\(idx)")
+                }))
+            }
+            actionSheet.setItemGroups([
+                ActionSheetItemGroup(items: items),
+                ActionSheetItemGroup(items: [
+                    ActionSheetButtonItem(title: "Отмена", color: .accent, action: { [weak actionSheet] in
+                        actionSheet?.dismissAnimated()
+                    })
+                ])
+            ])
+            presentControllerImpl?(actionSheet, nil)
+        },
+        selectSize: {
+            let current = Int(getPref("size", "1")) ?? 1
+            let actionSheet = ActionSheetController(presentationData: context.sharedContext.currentPresentationData.with { $0 })
+            var items: [ActionSheetItem] = [ActionSheetTextItem(title: "Выберите размер питомца")]
+            for (idx, name) in sizes.enumerated() {
+                let check = idx == current ? " ✓" : ""
+                items.append(ActionSheetButtonItem(title: "\(name)\(check)", color: .accent, action: { [weak actionSheet] in
+                    actionSheet?.dismissAnimated()
+                    setPref("size", "\(idx)")
+                }))
+            }
+            actionSheet.setItemGroups([
+                ActionSheetItemGroup(items: items),
+                ActionSheetItemGroup(items: [
+                    ActionSheetButtonItem(title: "Отмена", color: .accent, action: { [weak actionSheet] in
+                        actionSheet?.dismissAnimated()
+                    })
+                ])
+            ])
+            presentControllerImpl?(actionSheet, nil)
+        },
+        selectSleep: {
+            let current = Int(getPref("sleep", "1")) ?? 1
+            let actionSheet = ActionSheetController(presentationData: context.sharedContext.currentPresentationData.with { $0 })
+            var items: [ActionSheetItem] = [ActionSheetTextItem(title: "Время до засыпания")]
+            for (idx, name) in sleeps.enumerated() {
+                let check = idx == current ? " ✓" : ""
+                items.append(ActionSheetButtonItem(title: "\(name)\(check)", color: .accent, action: { [weak actionSheet] in
+                    actionSheet?.dismissAnimated()
+                    setPref("sleep", "\(idx)")
+                }))
+            }
+            actionSheet.setItemGroups([
+                ActionSheetItemGroup(items: items),
+                ActionSheetItemGroup(items: [
+                    ActionSheetButtonItem(title: "Отмена", color: .accent, action: { [weak actionSheet] in
+                        actionSheet?.dismissAnimated()
+                    })
+                ])
+            ])
+            presentControllerImpl?(actionSheet, nil)
+        },
+        recenterPet: {
+            NotificationCenter.default.post(name: NSNotification.Name("WgramClawdRecenter"), object: nil)
+            let alert = UIAlertController(title: "Клод вернулся! 🐾", message: "Питомец перемещён в центр экрана.", preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Отлично", style: .default))
+            context.sharedContext.applicationBindings.presentNativeController(alert)
+        },
+        spitAll: {
+            NotificationCenter.default.post(name: NSNotification.Name("WgramClawdSpitAll"), object: nil)
+            let alert = UIAlertController(title: "Кнопки возвращены", message: "Все съеденные элементы интерфейса возвращены на свои места.", preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            context.sharedContext.applicationBindings.presentNativeController(alert)
+        },
+        forgetBrain: {
+            let actionSheet = ActionSheetController(presentationData: context.sharedContext.currentPresentationData.with { $0 })
+            actionSheet.setItemGroups([
+                ActionSheetItemGroup(items: [
+                    ActionSheetTextItem(title: "Вы действительно хотите сбросить долговременную память Клода?"),
+                    ActionSheetButtonItem(title: "Забыть всё", color: .destructive, action: { [weak actionSheet] in
+                        actionSheet?.dismissAnimated()
+                        setPref("clawd_brain", "")
+                        NotificationCenter.default.post(name: NSNotification.Name("WgramClawdResetBrain"), object: nil)
+                        let alert = UIAlertController(title: "Память сброшена", message: "Клод теперь считает вас новым знакомым.", preferredStyle: .alert)
+                        alert.addAction(UIAlertAction(title: "OK", style: .default))
+                        context.sharedContext.applicationBindings.presentNativeController(alert)
+                    })
+                ]),
+                ActionSheetItemGroup(items: [
+                    ActionSheetButtonItem(title: "Отмена", color: .accent, action: { [weak actionSheet] in
+                        actionSheet?.dismissAnimated()
+                    })
+                ])
+            ])
+            presentControllerImpl?(actionSheet, nil)
+        },
+        editApiKey: {
+            let current = getPref("ai_key", "")
+            let alert = UIAlertController(title: "Google Gemini API Key", message: "Бесплатный ключ можно получить на aistudio.google.com/apikey", preferredStyle: .alert)
+            alert.addTextField { tf in
+                tf.placeholder = "Вставьте ваш ключ API"
+                tf.text = current
+                tf.isSecureTextEntry = true
+            }
+            alert.addAction(UIAlertAction(title: "Сохранить", style: .default, handler: { [weak alert] _ in
+                let key = alert?.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                setPref("ai_key", key)
+                setPref("ai_enabled", !key.isEmpty)
+            }))
+            alert.addAction(UIAlertAction(title: "Отмена", style: .cancel))
+            context.sharedContext.applicationBindings.presentNativeController(alert)
+        }
+    )
+    
+    let signal = combineLatest(context.sharedContext.presentationData, statePromise.get())
+    |> map { presentationData, _ -> (ItemListControllerState, (ItemListNodeState, WgramClawdSettingsArguments)) in
+        var entries: [WgramClawdEntry] = []
+        
+        let colorIdx = Int(getPref("color", "0")) ?? 0
+        let colorName = (colorIdx >= 0 && colorIdx < palettes.count) ? palettes[colorIdx] : "Claude"
+        
+        let sizeIdx = Int(getPref("size", "1")) ?? 1
+        let sizeName = (sizeIdx >= 0 && sizeIdx < sizes.count) ? sizes[sizeIdx] : "Средний"
+        
+        let sleepIdx = Int(getPref("sleep", "1")) ?? 1
+        let sleepName = (sleepIdx >= 0 && sleepIdx < sleeps.count) ? sleeps[sleepIdx] : "Через 3 мин"
+        
+        // 1. ВНЕШНИЙ ВИД
+        entries.append(.header(WgramClawdSection.appearance.rawValue, presentationData.theme, "ВНЕШНИЙ ВИД"))
+        entries.append(.disclosureItem(WgramClawdSection.appearance.rawValue, "color", presentationData.theme, "Окрас", colorName, {
+            arguments.selectColor()
+        }))
+        entries.append(.disclosureItem(WgramClawdSection.appearance.rawValue, "size", presentationData.theme, "Размер", sizeName, {
+            arguments.selectSize()
+        }))
+        
+        // 2. ПОВЕДЕНИЕ
+        entries.append(.header(WgramClawdSection.behavior.rawValue, presentationData.theme, "ПОВЕДЕНИЕ"))
+        entries.append(.switchItem(WgramClawdSection.behavior.rawValue, "gravity", presentationData.theme, "Гравитация", getBoolPref("gravity", false), { val in
+            arguments.updateSetting("gravity", val)
+        }))
+        entries.append(.switchItem(WgramClawdSection.behavior.rawValue, "wander", presentationData.theme, "Гуляет сам", getBoolPref("wander", true), { val in
+            arguments.updateSetting("wander", val)
+        }))
+        entries.append(.switchItem(WgramClawdSection.behavior.rawValue, "phrases", presentationData.theme, "Разговаривает", getBoolPref("phrases", true), { val in
+            arguments.updateSetting("phrases", val)
+        }))
+        entries.append(.switchItem(WgramClawdSection.behavior.rawValue, "eat", presentationData.theme, "Ест кнопки интерфейса", getBoolPref("eat", true), { val in
+            arguments.updateSetting("eat", val)
+        }))
+        entries.append(.switchItem(WgramClawdSection.behavior.rawValue, "poop", presentationData.theme, "Оставляет кучки", getBoolPref("poop", true), { val in
+            arguments.updateSetting("poop", val)
+        }))
+        entries.append(.switchItem(WgramClawdSection.behavior.rawValue, "shake", presentationData.theme, "Чувствует тряску", getBoolPref("shake", true), { val in
+            arguments.updateSetting("shake", val)
+        }))
+        entries.append(.disclosureItem(WgramClawdSection.behavior.rawValue, "sleep", presentationData.theme, "Засыпает", sleepName, {
+            arguments.selectSleep()
+        }))
+        
+        // 3. УПРАВЛЕНИЕ
+        entries.append(.header(WgramClawdSection.actions.rawValue, presentationData.theme, "УПРАВЛЕНИЕ"))
+        entries.append(.actionItem(WgramClawdSection.actions.rawValue, "recenter", presentationData.theme, "Позвать в центр экрана", .generic, {
+            arguments.recenterPet()
+        }))
+        entries.append(.actionItem(WgramClawdSection.actions.rawValue, "spit", presentationData.theme, "Вернуть все съеденные кнопки", .generic, {
+            arguments.spitAll()
+        }))
+        
+        // 4. ИИ-РЕПЛИКИ
+        entries.append(.header(WgramClawdSection.ai.rawValue, presentationData.theme, "ИИ-РЕПЛИКИ"))
+        let aiEnabled = getBoolPref("ai_enabled", false)
+        entries.append(.switchItem(WgramClawdSection.ai.rawValue, "ai_enabled", presentationData.theme, "Отвечать через ИИ", aiEnabled, { val in
+            arguments.updateSetting("ai_enabled", val)
+        }))
+        let keyMask = getPref("ai_key", "").isEmpty ? "Не задан" : "••••••••"
+        entries.append(.disclosureItem(WgramClawdSection.ai.rawValue, "ai_key", presentationData.theme, "API-ключ Gemini", keyMask, {
+            arguments.editApiKey()
+        }))
+        
+        // 5. МОЗГ И ПАМЯТЬ
+        entries.append(.header(WgramClawdSection.brain.rawValue, presentationData.theme, "МОЗГ И ПАМЯТЬ"))
+        entries.append(.actionItem(WgramClawdSection.brain.rawValue, "forget", presentationData.theme, "Забыть всё", .destructive, {
+            arguments.forgetBrain()
+        }))
+        
+        let controllerState = ItemListControllerState(
+            presentationData: ItemListPresentationData(presentationData),
+            title: .text("Настройки Clawd Pet"),
+            leftNavigationButton: nil,
+            rightNavigationButton: nil,
+            backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)
+        )
+        
+        let listState = ItemListNodeState(
+            presentationData: ItemListPresentationData(presentationData),
+            entries: entries,
+            style: .blocks,
+            animateChanges: true
+        )
+        
+        return (controllerState, (listState, arguments))
+    }
+    
+    let controller = ItemListController(context: context, state: signal)
+    presentControllerImpl = { [weak controller] c, p in
+        if let controller = controller {
+            controller.present(c, in: .window(.root), with: p as? ViewControllerPresentationArguments)
+        }
+    }
+    return controller
+}

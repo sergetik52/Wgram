@@ -157,6 +157,7 @@ public func wgramPluginsController(context: AccountContext) -> ViewController {
     let statePromise = ValuePromise<WgramPluginsState>(WgramPluginsState(plugins: WgramPluginEngine.shared.installedPlugins), ignoreRepeated: true)
     
     var presentControllerImpl: ((ViewController, Any?) -> Void)?
+    var pushControllerImpl: ((ViewController) -> Void)?
     
     final class DocPickerDelegate: NSObject, UIDocumentPickerDelegate {
         var onPick: ((String) -> Void)?
@@ -178,15 +179,25 @@ public func wgramPluginsController(context: AccountContext) -> ViewController {
         },
         openPluginDetails: { plugin in
             let actionSheet = ActionSheetController(presentationData: context.sharedContext.currentPresentationData.with { $0 })
+            var items: [ActionSheetItem] = [
+                ActionSheetTextItem(title: "\(plugin.name) v\(plugin.version)\n\n\(plugin.description)\n\nАвтор: \(plugin.author.isEmpty ? "Не указан" : plugin.author)")
+            ]
+            
+            if plugin.id == "clawd_pet" || plugin.id.contains("clawd") {
+                items.append(ActionSheetButtonItem(title: "Настройки питомца ⚙️", color: .accent, action: { [weak actionSheet] in
+                    actionSheet?.dismissAnimated()
+                    pushControllerImpl?(wgramClawdSettingsController(context: context))
+                }))
+            }
+            
+            items.append(ActionSheetButtonItem(title: "Удалить плагин", color: .destructive, action: { [weak actionSheet] in
+                actionSheet?.dismissAnimated()
+                WgramPluginEngine.shared.deletePlugin(id: plugin.id)
+                statePromise.set(WgramPluginsState(plugins: WgramPluginEngine.shared.installedPlugins))
+            }))
+            
             actionSheet.setItemGroups([
-                ActionSheetItemGroup(items: [
-                    ActionSheetTextItem(title: "\(plugin.name) v\(plugin.version)\n\n\(plugin.description)\n\nАвтор: \(plugin.author.isEmpty ? "Не указан" : plugin.author)"),
-                    ActionSheetButtonItem(title: "Удалить плагин", color: .destructive, action: { [weak actionSheet] in
-                        actionSheet?.dismissAnimated()
-                        WgramPluginEngine.shared.deletePlugin(id: plugin.id)
-                        statePromise.set(WgramPluginsState(plugins: WgramPluginEngine.shared.installedPlugins))
-                    })
-                ]),
+                ActionSheetItemGroup(items: items),
                 ActionSheetItemGroup(items: [
                     ActionSheetButtonItem(title: "Закрыть", color: .accent, action: { [weak actionSheet] in
                         actionSheet?.dismissAnimated()
@@ -281,6 +292,9 @@ public func wgramPluginsController(context: AccountContext) -> ViewController {
         if let controller = controller {
             controller.present(c, in: .window(.root), with: p as? ViewControllerPresentationArguments)
         }
+    }
+    pushControllerImpl = { [weak controller] c in
+        (controller?.navigationController as? NavigationController)?.pushViewController(c)
     }
     
     let _ = NotificationCenter.default.addObserver(forName: WgramPluginEngine.pluginsChangedNotification, object: nil, queue: .main) { _ in

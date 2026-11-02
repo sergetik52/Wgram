@@ -20,6 +20,10 @@ import CoreMotion
     func spawnParticle(_ kind: String, _ x: Double, _ y: Double)
     func createPoop(_ x: Double, _ y: Double, _ onClick: JSValue)
     func removePoops()
+    func setPeeking(_ peeking: Bool)
+    func eatNearestButton() -> Bool
+    func spitAll()
+    func getEatenCount() -> Int
     func destroy()
     
     var onTick: JSValue? { get set }
@@ -34,6 +38,8 @@ public final class WgramFloatingWidget: UIView, WgramFloatingWidgetJSExport, UIG
     
     private var pixelRects: [(rect: CGRect, color: UIColor)] = []
     private var poopViews: [UIView] = []
+    private var isPeeking: Bool = false
+    private var eatenViews: [(view: UIView, originalAlpha: CGFloat, snapshot: UIView?, originalFrame: CGRect)] = []
     private var displayLink: CADisplayLink?
     private var lastTimestamp: CFTimeInterval = 0
     
@@ -182,12 +188,16 @@ public final class WgramFloatingWidget: UIView, WgramFloatingWidgetJSExport, UIG
             self.velocity.y += self.gravity.y * dt
             self.velocity.x += self.gravity.x * dt
             
-            // Screen boundaries
+            // Screen boundaries & platforms
             let safeArea = superview.safeAreaInsets
-            let minX = safeArea.left
-            let maxX = max(minX, superview.bounds.width - safeArea.right - self.frame.width)
+            let minX = self.isPeeking ? -self.frame.width + 16.0 : safeArea.left
+            let maxX = self.isPeeking ? superview.bounds.width - 16.0 : max(minX, superview.bounds.width - safeArea.right - self.frame.width)
             let minY = safeArea.top + 20.0
-            let maxY = max(minY, superview.bounds.height - safeArea.bottom - self.frame.height - 10.0)
+            var maxY = max(minY, superview.bounds.height - safeArea.bottom - self.frame.height - 10.0)
+            
+            if let platformY = self.detectPlatformY(floorY: maxY) {
+                maxY = platformY
+            }
             
             if currentPos.x <= minX {
                 currentPos.x = minX
@@ -336,6 +346,121 @@ public final class WgramFloatingWidget: UIView, WgramFloatingWidgetJSExport, UIG
         }
     }
     
+    public func setPeeking(_ peeking: Bool) {
+        DispatchQueue.main.async { [weak self] in
+            self?.isPeeking = peeking
+        }
+    }
+    
+    private func detectPlatformY(floorY: CGFloat) -> CGFloat? {
+        guard let window = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first?.windows.first(where: { $0.isKeyWindow }) else {
+            return nil
+        }
+        
+        let footX = self.frame.midX
+        let footY = self.frame.maxY
+        let hit = window.hitTest(CGPoint(x: footX, y: footY + 4.0), with: nil)
+        if let target = hit, target !== window, let superview = self.superview {
+            let targetFrame = target.convert(target.bounds, to: superview)
+            let topY = targetFrame.minY - self.frame.height
+            if topY > 80.0 && topY < floorY && footY >= targetFrame.minY - 14.0 && footY <= targetFrame.minY + 24.0 {
+                return topY
+            }
+        }
+        return nil
+    }
+    
+    public func eatNearestButton() -> Bool {
+        guard let window = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first?.windows.first(where: { $0.isKeyWindow }) else {
+            return false
+        }
+        
+        var candidates: [UIView] = []
+        var queue: [UIView] = [window]
+        while !queue.isEmpty && candidates.count < 30 {
+            let v = queue.removeFirst()
+            if v.isHidden || v.alpha < 0.5 { continue }
+            
+            let frame = v.convert(v.bounds, to: nil)
+            let w = frame.width
+            let h = frame.height
+            
+            if (v is UIButton || (v is UIImageView && v.isUserInteractionEnabled) || (w >= 24 && w <= 80 && h >= 24 && h <= 80)) && frame.minY > 40 && frame.maxY < UIScreen.main.bounds.height - 20 {
+                if !self.eatenViews.contains(where: { $0.view === v }) {
+                    candidates.append(v)
+                }
+            }
+            for sub in v.subviews {
+                queue.append(sub)
+            }
+        }
+        
+        guard let target = candidates.randomElement(), let superview = self.superview else {
+            return false
+        }
+        
+        let destRect = target.convert(target.bounds, to: superview)
+        guard let snapshot = target.snapshotView(afterScreenUpdates: false) else {
+            return false
+        }
+        snapshot.frame = destRect
+        superview.addSubview(snapshot)
+        
+        let origAlpha = target.alpha
+        target.alpha = 0.0
+        self.eatenViews.append((view: target, originalAlpha: origAlpha, snapshot: snapshot, originalFrame: destRect))
+        
+        let mouthPoint = CGPoint(x: self.frame.midX, y: self.frame.minY + self.frame.height * 0.6)
+        UIView.animate(withDuration: 0.5, delay: 0, options: [.curveEaseIn], animations: {
+            snapshot.center = mouthPoint
+            snapshot.transform = CGAffineTransform(scaleX: 0.05, y: 0.05).rotated(by: .pi)
+        }) { _ in
+            snapshot.removeFromSuperview()
+        }
+        return true
+    }
+    
+    public func spitAll() {
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self, !strongSelf.eatenViews.isEmpty, let superview = strongSelf.superview else { return }
+            let items = strongSelf.eatenViews
+            strongSelf.eatenViews.removeAll()
+            
+            let mouthPoint = CGPoint(x: strongSelf.frame.midX, y: strongSelf.frame.minY + strongSelf.frame.height * 0.6)
+            
+            for (index, item) in items.enumerated() {
+                let target = item.view
+                guard target.window != nil else {
+                    target.alpha = item.originalAlpha
+                    continue
+                }
+                
+                let currentDest = target.convert(target.bounds, to: superview)
+                let snapshot = target.snapshotView(afterScreenUpdates: false) ?? UIView(frame: currentDest)
+                snapshot.frame = CGRect(origin: mouthPoint, size: currentDest.size)
+                snapshot.transform = CGAffineTransform(scaleX: 0.05, y: 0.05).rotated(by: .pi)
+                superview.addSubview(snapshot)
+                
+                let delay = Double(index) * 0.08
+                UIView.animate(withDuration: 0.45, delay: delay, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5, options: [], animations: {
+                    snapshot.frame = currentDest
+                    snapshot.transform = .identity
+                }) { _ in
+                    target.alpha = item.originalAlpha
+                    snapshot.removeFromSuperview()
+                }
+            }
+        }
+    }
+    
+    public func getEatenCount() -> Int {
+        return self.eatenViews.count
+    }
+    
     // MARK: - Speech Bubble
     public func showSpeech(_ text: String, _ duration: Double) {
         DispatchQueue.main.async { [weak self] in
@@ -391,6 +516,7 @@ public final class WgramFloatingWidget: UIView, WgramFloatingWidgetJSExport, UIG
     
     public func destroy() {
         DispatchQueue.main.async { [weak self] in
+            self?.spitAll()
             self?.displayLink?.invalidate()
             self?.displayLink = nil
             self?.speechDismissTimer?.invalidate()

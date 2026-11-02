@@ -25,6 +25,9 @@ public final class WgramPluginEngine {
     private var activeContexts: [String: JSContext] = [:]
     private var activeWidgets: [String: [WgramFloatingWidget]] = [:]
     private var outgoingMessageHooks: [String: JSValue] = [:]
+    private var incomingMessageHooks: [String: JSValue] = [:]
+    private var chatOpenedHooks: [String: JSValue] = [:]
+    private var settingsUpdatedHooks: [String: JSValue] = [:]
     private var commandHooks: [String: [String: JSValue]] = [:] // pluginId -> [command -> function]
     
     private var motionManager: CMMotionManager?
@@ -42,6 +45,22 @@ public final class WgramPluginEngine {
     private init() {
         self.loadFromDisk()
         self.startEnabledPlugins()
+        
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("WgramClawdSettingsUpdated"), object: nil, queue: .main) { [weak self] _ in
+            guard let strongSelf = self else { return }
+            for (_, hook) in strongSelf.settingsUpdatedHooks {
+                hook.call(withArguments: [])
+            }
+        }
+        
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("WgramClawdSpitAll"), object: nil, queue: .main) { [weak self] _ in
+            guard let strongSelf = self else { return }
+            for (_, widgets) in strongSelf.activeWidgets {
+                for w in widgets {
+                    w.spitAll()
+                }
+            }
+        }
     }
     
     // MARK: - Persistence
@@ -120,6 +139,24 @@ public final class WgramPluginEngine {
             self?.outgoingMessageHooks[plugin.id] = callback
         }
         wgramObj.setValue(onSendHandler, forProperty: "onSendMessage")
+        
+        // wgram.onIncomingMessage
+        let onIncomingHandler: @convention(block) (JSValue) -> Void = { [weak self] callback in
+            self?.incomingMessageHooks[plugin.id] = callback
+        }
+        wgramObj.setValue(onIncomingHandler, forProperty: "onIncomingMessage")
+        
+        // wgram.onChatOpened
+        let onChatOpenedHandler: @convention(block) (JSValue) -> Void = { [weak self] callback in
+            self?.chatOpenedHooks[plugin.id] = callback
+        }
+        wgramObj.setValue(onChatOpenedHandler, forProperty: "onChatOpened")
+        
+        // wgram.onSettingsUpdated
+        let onSettingsHandler: @convention(block) (JSValue) -> Void = { [weak self] callback in
+            self?.settingsUpdatedHooks[plugin.id] = callback
+        }
+        wgramObj.setValue(onSettingsHandler, forProperty: "onSettingsUpdated")
         
         // wgram.registerCommand
         let regCmdHandler: @convention(block) (String, JSValue) -> Void = { [weak self] name, callback in
@@ -303,6 +340,9 @@ public final class WgramPluginEngine {
             self.overlayWindow?.isHidden = true
         }
         self.outgoingMessageHooks.removeValue(forKey: id)
+        self.incomingMessageHooks.removeValue(forKey: id)
+        self.chatOpenedHooks.removeValue(forKey: id)
+        self.settingsUpdatedHooks.removeValue(forKey: id)
         self.commandHooks.removeValue(forKey: id)
         self.motionListeners.removeValue(forKey: id)
         if self.motionListeners.isEmpty {
@@ -387,28 +427,54 @@ public final class WgramPluginEngine {
         var currentText = text
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // 1. Check custom commands (.shrug, etc.)
+        // 1. Check custom commands (/clawd, .shrug, etc.)
         for (_, cmdMap) in self.commandHooks {
             for (cmdName, handler) in cmdMap {
-                if trimmed.lowercased().hasPrefix(cmdName) {
-                    let args = String(trimmed.dropFirst(cmdName.count)).trimmingCharacters(in: .whitespaces)
-                    let chatIdStr = peerId.flatMap { "\($0.toInt64())" } ?? ""
-                    if let result = handler.call(withArguments: [chatIdStr, args]), !result.isUndefined && !result.isNull {
-                        return result.toString()
+                let lowerCmd = cmdName.lowercased()
+                let prefix1 = lowerCmd.hasPrefix("/") || lowerCmd.hasPrefix(".") ? lowerCmd : "/" + lowerCmd
+                let prefix2 = lowerCmd.hasPrefix("/") ? String(lowerCmd.dropFirst()) : lowerCmd
+                
+                if trimmed.lowercased().hasPrefix(prefix1) || trimmed.lowercased().hasPrefix(prefix2) {
+                    let usedPrefix = trimmed.lowercased().hasPrefix(prefix1) ? prefix1 : prefix2
+                    let args = String(trimmed.dropFirst(usedPrefix.count)).trimmingCharacters(in: .whitespaces)
+                    let result = handler.call(withArguments: [args])
+                    if let resStr = result?.toString(), !result!.isUndefined && !result!.isNull, !resStr.isEmpty {
+                        DispatchQueue.main.async {
+                            WgramPluginEngine.showToastAlert(message: resStr)
+                        }
                     }
+                    return "" // Cancel sending message to chat
                 }
             }
         }
         
         // 2. Check onSendMessage hooks
         for (_, hook) in self.outgoingMessageHooks {
-            let chatIdStr = peerId.flatMap { "\($0.toInt64())" } ?? ""
-            if let result = hook.call(withArguments: [chatIdStr, currentText]), !result.isUndefined && !result.isNull {
+            if let result = hook.call(withArguments: [currentText]), !result.isUndefined && !result.isNull {
                 currentText = result.toString()
             }
         }
         
         return currentText != text ? currentText : nil
+    }
+    
+    // MARK: - Incoming Message & Chat Open Notifications
+    public func notifyIncomingMessage(text: String, senderName: String) {
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self else { return }
+            for (_, hook) in strongSelf.incomingMessageHooks {
+                hook.call(withArguments: [text, senderName])
+            }
+        }
+    }
+    
+    public func notifyChatOpened(title: String, isSavedMessages: Bool) {
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self else { return }
+            for (_, hook) in strongSelf.chatOpenedHooks {
+                hook.call(withArguments: [title, isSavedMessages])
+            }
+        }
     }
     
     // MARK: - Metadata Parser

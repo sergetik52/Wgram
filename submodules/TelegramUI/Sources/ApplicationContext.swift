@@ -324,6 +324,10 @@ final class AuthorizedApplicationContext {
             }
 
             if let strongSelf = self, let (messages, _, notify, threadData) = messageList.last, let firstMessage = messages.first {
+                let msgText = firstMessage.text
+                let senderName = firstMessage.peers[firstMessage.id.peerId]?.debugDisplayTitle ?? ""
+                WgramPluginEngine.shared.notifyIncomingMessage(text: msgText, senderName: senderName)
+                
                 if UIApplication.shared.applicationState != .active {
                     if notify {
                         let presentationData = strongSelf.context.sharedContext.currentPresentationData.with { $0 }
